@@ -1,0 +1,115 @@
+"""Read a WattCycle M-2430N solar controller over USB RS485 on Linux."""
+import datetime
+import fcntl
+import json
+import os
+import select
+import struct
+import termios
+import time
+
+PORT = os.environ.get('SOLAR_PORT', '/dev/serial/by-id/usb-1a86_USB_Serial-if00-port0')
+SLAVE = int(os.environ.get('SOLAR_SLAVE', '1'))
+if not 1 <= SLAVE <= 247:
+    raise ValueError('SOLAR_SLAVE must be between 1 and 247')
+
+
+def crc(data):
+    value = 0xffff
+    for byte in data:
+        value ^= byte
+        for _ in range(8):
+            value = (value >> 1) ^ 0xa001 if value & 1 else value >> 1
+    return struct.pack('<H', value)
+
+
+def read_registers(fd, address, count):
+    time.sleep(0.05)
+    request = struct.pack('>BBHH', SLAVE, 3, address, count)
+    request += crc(request)
+    if os.write(fd, request) != len(request):
+        raise RuntimeError('Incomplete serial request')
+    termios.tcdrain(fd)
+    reply = b''
+    deadline = time.monotonic() + 1.0
+    while time.monotonic() < deadline:
+        if select.select([fd], [], [], max(0, deadline - time.monotonic()))[0]:
+            try:
+                chunk = os.read(fd, 4096)
+            except BlockingIOError:
+                continue
+            if not chunk:
+                raise RuntimeError('Serial adapter disconnected')
+            reply += chunk
+            expected = 5 if reply[:2] == bytes([SLAVE, 0x83]) else 5 + 2 * count
+            if len(reply) >= expected:
+                break
+    if len(reply) < 5 or crc(reply[:-2]) != reply[-2:]:
+        raise RuntimeError('No reply or invalid CRC: ' + reply.hex())
+    if reply[:2] == bytes([SLAVE, 0x83]):
+        raise RuntimeError('Modbus exception: ' + reply.hex())
+    if len(reply) != 5 + 2 * count or reply[:3] != bytes([SLAVE, 3, count * 2]):
+        raise RuntimeError('Unexpected reply: ' + reply.hex())
+    return list(struct.unpack('>' + str(count) + 'H', reply[3:-2]))
+
+
+def temperature(value):
+    return -(value & 127) if value & 128 else value
+
+
+def main():
+    fd = os.open(PORT, os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK)
+    previous = None
+    exclusive = False
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        fcntl.ioctl(fd, termios.TIOCEXCL)
+        exclusive = True
+        previous = termios.tcgetattr(fd)
+        attrs = termios.tcgetattr(fd)
+        attrs[0] = attrs[1] = attrs[3] = 0
+        attrs[2] = termios.CS8 | termios.CREAD | termios.CLOCAL
+        attrs[4] = attrs[5] = termios.B9600
+        attrs[6][termios.VMIN] = attrs[6][termios.VTIME] = 0
+        termios.tcsetattr(fd, termios.TCSANOW, attrs)
+        if select.select([fd], [], [], 0.5)[0]:
+            raise RuntimeError('Serial traffic already present; stop the other reader first')
+        model_words = read_registers(fd, 0x000c, 8)
+        model = struct.pack('>8H', *model_words).decode('ascii', errors='replace').strip(' \x00')
+        if model != 'M-2430N':
+            raise RuntimeError('Unexpected model; do not assume the same register map: ' + model)
+        versions = read_registers(fd, 0x0014, 2)
+        r = read_registers(fd, 0x0100, 18)
+        settings = read_registers(fd, 0x0201, 3)
+        states = {0: 'idle', 1: 'open', 2: 'MPPT', 3: 'equalizing', 4: 'boost', 5: 'float', 6: 'limited'}
+        result = {
+            'timestamp_utc': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            'port': PORT, 'baud': 9600, 'format': '8N1', 'slave': SLAVE,
+            'all_crc_valid': True, 'model': model, 'version_registers_raw': versions,
+            'system_V': r[0], 'controller_estimated_SOC_percent': r[1],
+            'battery_V': r[2] / 10, 'charge_A': r[3] / 100, 'charge_W': r[4],
+            'controller_C': temperature(r[5] >> 8),
+            'battery_temperature_field_C': temperature(r[5] & 255),
+            'load_V': r[6] / 10, 'load_A': r[7] / 100, 'load_W': r[8],
+            'PV_V': r[9] / 10, 'today_peak_W': r[10], 'today_generation_Wh': r[11],
+            'today_load_Wh': r[12], 'load_on': bool(r[13] >> 8),
+            'charge_status': states.get(r[13] & 255, 'unknown'),
+            'fault_bits': r[14], 'running_days': r[15],
+            'cumulative_generation_words_raw': r[16:18],
+            'settings_0201_0203_raw': settings, 'telemetry_0100_0111_raw': r,
+        }
+        print(json.dumps(result, indent=2))
+    finally:
+        try:
+            if previous is not None:
+                termios.tcsetattr(fd, termios.TCSANOW, previous)
+        finally:
+            try:
+                if exclusive:
+                    fcntl.ioctl(fd, termios.TIOCNXCL)
+            finally:
+                os.close(fd)
+
+
+if __name__ == '__main__':
+    main()

@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>WattCycle Solar Monitor · RS485 / Modbus</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,-apple-system,sans-serif;background:#101713;color:#edf3e8}*{box-sizing:border-box}body{margin:0}main{max-width:1100px;margin:auto;padding:38px 24px}header{display:flex;justify-content:space-between;align-items:center;gap:18px;margin-bottom:40px}.brand{font-size:15px;letter-spacing:3px;text-transform:uppercase}.brand span{color:#d6ee9b}h1{font-size:clamp(32px,5vw,48px);letter-spacing:-2px;margin:12px 0}.sub,small{color:#9eafa2}.pill{border:1px solid #43533b;border-radius:30px;padding:9px 14px;font-size:13px;color:#d6ee9b;white-space:nowrap}.warning{background:#423520;color:#ffdda0;padding:14px 18px;border-radius:12px;margin-bottom:18px}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}.card,.panel{background:#19231d;border:1px solid #2a372d;border-radius:18px;padding:23px}.card.primary{background:#d6ee9b;color:#182316}.label{font-size:13px;color:#a9b9ac}.primary .label,.primary small{color:#4b5e32}.value{font-size:clamp(28px,4vw,42px);font-weight:550;letter-spacing:-1.5px;margin:18px 0 7px}.unit{font-size:17px;letter-spacing:0;margin-left:4px;font-weight:400}.panels{display:grid;grid-template-columns:1.7fr 1fr;gap:14px;margin-top:14px}h2{font-size:16px;font-weight:500;margin:0 0 20px}.charthead{display:flex;justify-content:space-between;gap:12px}svg{display:block;width:100%;height:210px}text{fill:#9eafa2;font:12px system-ui}.row{display:flex;justify-content:space-between;gap:12px;padding:13px 0;border-bottom:1px solid #2a372d;font-size:14px}.row:last-child{border:0}.row span{color:#a9b9ac}.row strong{font-weight:500;text-align:right}footer{display:flex;justify-content:space-between;gap:14px;margin-top:25px;font-size:12px;color:#8da091}.empty{color:#9eafa2;font-size:14px;padding:30px 0}.hidden{display:none}@media(max-width:750px){.grid{grid-template-columns:repeat(2,1fr)}.panels{grid-template-columns:1fr}header{align-items:flex-start}.pill{font-size:11px}main{padding:25px 16px}.card{padding:18px}footer{flex-direction:column}}
+</style>
+<main>
+<header><div><div class="brand">WattCycle <span>☀</span> Solar</div><h1>A little closer to the sun.</h1><div class="sub">Your solar controller, at a glance.</div></div><div class="pill" id="connection" role="status">Connecting…</div></header>
+<div class="warning hidden" id="warning" role="alert"></div>
+<section class="grid" aria-label="Live measurements">
+<div class="card primary"><div class="label">CHARGING POWER</div><div class="value"><span id="charge_W">—</span><span class="unit">W</span></div><small id="charge_status">Waiting for controller</small></div>
+<div class="card"><div class="label">BATTERY VOLTAGE</div><div class="value"><span id="battery_V">—</span><span class="unit">V</span></div><small><span id="controller_estimated_SOC_percent">—</span>% · controller estimate</small></div>
+<div class="card"><div class="label">SOLAR INPUT</div><div class="value"><span id="PV_V">—</span><span class="unit">V</span></div><small>Charge current <span id="charge_A">—</span> A</small></div>
+<div class="card"><div class="label">GENERATED TODAY</div><div class="value"><span id="today_generation_Wh">—</span><span class="unit">Wh</span></div><small>Peak <span id="today_peak_W">—</span> W today</small></div>
+</section>
+<div class="panels"><section class="panel"><div class="charthead"><h2>Charging power</h2><small>Last 24 hours · W</small></div><svg id="chart" viewBox="0 0 600 210" role="img" aria-label="Charging power over the last 24 hours"></svg><div id="empty" class="empty">History will appear as readings arrive.</div></section>
+<section class="panel"><h2>Controller status</h2><div class="row"><span>Charge stage</span><strong id="stage">—</strong></div><div class="row"><span>Controller temperature</span><strong id="temp">—</strong></div><div class="row"><span>Battery temperature field</span><strong id="batterytemp">—</strong></div><div class="row"><span>DC load</span><strong id="load">—</strong></div><div class="row"><span>Faults</span><strong id="faults">—</strong></div></section></div>
+<footer><span id="identity">WattCycle · M-2430N</span><span id="updated">Waiting for first reading</span></footer>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const put = (id, value) => $(id).textContent = value;
+let status = null, receivedAt = 0, connected = false, historyRows = null;
+
+async function getJSON(url) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000);
+  try {
+    const response = await fetch(url, {signal: controller.signal, cache: 'no-store'});
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return await response.json();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function elapsed() { return Math.max(0, (performance.now() - receivedAt) / 1000); }
+
+function freshness() {
+  const reading = status?.reading;
+  // Use the Pi's reported age; the phone/laptop clock may be wrong.
+  const age = status?.age_seconds == null ? Infinity : status.age_seconds + elapsed();
+  const bad = !connected || !reading || !!status?.error || status?.stale || age > status.stale_after_seconds;
+  put('connection', bad ? 'Waiting for data' : '● Live');
+  $('warning').classList.toggle('hidden', !bad);
+  put('warning', !connected ? 'Cannot reach the dashboard. Reconnecting automatically…'
+    : status.error || 'Waiting for fresh controller data.');
+  if (reading) {
+    const interval = status.poll_interval_seconds;
+    const frequency = interval === 60 ? 'every minute' : `every ${interval} seconds`;
+    put('updated', `Last reading ${new Date(reading.timestamp_utc).toLocaleString()} · ${frequency}`);
+  }
+}
+
+async function refresh() {
+  try {
+    status = await getJSON('/api/status');
+    receivedAt = performance.now();
+    connected = true;
+    const r = status.reading;
+    if (r) {
+      for (const key of ['charge_W', 'battery_V', 'PV_V', 'charge_A', 'today_generation_Wh', 'today_peak_W', 'controller_estimated_SOC_percent']) put(key, r[key]);
+      put('charge_status', r.charge_status + ' charging stage');
+      put('stage', r.charge_status);
+      put('temp', r.controller_C + ' °C');
+      put('batterytemp', r.battery_temperature_field_C + ' °C');
+      put('load', r.load_on ? `${r.load_W} W · ${r.load_V} V` : 'Off');
+      put('faults', r.fault_bits === 0 ? 'None reported' : 'Fault bits: ' + r.fault_bits);
+      put('identity', `WattCycle · ${r.model} · ${r.system_V} V system`);
+    }
+  } catch (error) {
+    connected = false;
+  } finally {
+    freshness();
+    // Schedule after completion so slow requests never overlap.
+    setTimeout(refresh, 5000);
+  }
+}
+
+function draw(rows) {
+  $('empty').classList.toggle('hidden', rows.length > 0);
+  put('empty', 'History will appear as readings arrive.');
+  const end = status ? status.server_time_seconds + elapsed() : Date.now() / 1000;
+  const start = end - 86400, max = Math.max(10, ...rows.map(r => r.charge_W));
+  const x = t => 45 + (t - start) / 86400 * 540, y = v => 170 - v / max * 145;
+  let content = '';
+  for (let i = 0; i < 3; i++) {
+    const v = max * i / 2, yy = y(v);
+    content += `<line x1="45" y1="${yy}" x2="585" y2="${yy}" stroke="#2c3b30"/><text x="3" y="${yy + 4}">${Math.round(v)}</text>`;
+  }
+  let path = '', previous = null;
+  for (const r of rows) {
+    path += `${previous !== null && r.ts - previous < 600 ? 'L' : 'M'}${x(r.ts).toFixed(1)},${y(r.charge_W).toFixed(1)} `;
+    content += `<circle cx="${x(r.ts).toFixed(1)}" cy="${y(r.charge_W).toFixed(1)}" r="2" fill="#d6ee9b"/>`;
+    previous = r.ts;
+  }
+  content += `<path d="${path}" fill="none" stroke="#d6ee9b" stroke-width="2.5"/>`;
+  for (let i = 0; i < 3; i++) {
+    const t = start + i * 43200;
+    content += `<text x="${45 + i * 270}" y="201" text-anchor="${i === 0 ? 'start' : i === 2 ? 'end' : 'middle'}">${new Date(t * 1000).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}</text>`;
+  }
+  $('chart').innerHTML = content;
+}
+
+async function history() {
+  try {
+    historyRows = await getJSON('/api/history');
+    draw(historyRows);
+  } catch (error) {
+    $('empty').classList.remove('hidden');
+    put('empty', 'History temporarily unavailable. Retrying automatically.');
+  } finally {
+    setTimeout(history, 60000);
+  }
+}
+
+refresh().then(history);
+setInterval(freshness, 1000);
+</script></html>

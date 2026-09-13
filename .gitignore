@@ -1,0 +1,34 @@
+# Runtime telemetry and backups are private and can grow indefinitely.
+*.sqlite3
+*.sqlite3-*
+*.db
+*.db-*
+data/
+backups/
+*.tar
+*.tar.gz
+*.zip
+*.log
+
+# Local configuration, credentials, and machine-specific notes.
+.env
+.env.*
+!.env.example
+*.local
+*.pem
+*.key
+*.pub
+private/
+
+# Python, editors, and operating systems.
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.DS_Store
+.idea/
+.vscode/
+node_modules/
+
+# Link to third-party manuals instead of redistributing them.
+*.pdf

@@ -1,0 +1,14 @@
+[Unit]
+Description=WattCycle RS485 solar controller monitor
+
+[Service]
+WorkingDirectory=%h/wattcycle-solar-monitor
+EnvironmentFile=-%h/.config/wattcycle-solar-monitor.env
+ExecStart=/usr/bin/python3 %h/wattcycle-solar-monitor/dashboard/server.py
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+UMask=0077
+
+[Install]
+WantedBy=default.target
