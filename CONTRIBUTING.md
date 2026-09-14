@@ -23,6 +23,9 @@ Node.js is needed only for the optional frontend development tests. Mocked
 tests do not prove compatibility with a new device; clearly distinguish a
 hardware test from simulated responses.
 
-Do not attach credentials, private network addresses, full production databases,
-or third-party manual files. Link to public manuals and include the smallest
-redacted excerpt needed to explain the issue.
+Do not attach credentials, private network addresses, or full production databases.
+For reference manuals and product photographs, record the public source, retrieval
+date, and scope in [third-party references](docs/third-party.md). Keep manuals in
+`docs/manuals/` and identify third-party assets separately from the MIT-licensed
+project material. Hardware reports should distinguish published specifications,
+owner confirmation, and measurements.

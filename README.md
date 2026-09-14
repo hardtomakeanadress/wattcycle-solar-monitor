@@ -49,15 +49,23 @@ flowchart LR
 | --- | --- |
 | Controller | WattCycle 30 A MPPT, model response `M-2430N` |
 | Host | Raspberry Pi 2 Model B Rev 1.1, 32-bit Linux, Python 3.13 |
-| Adapter | CH340-based USB serial converter, USB ID `1a86:7523`, installed RS485 link |
+| Adapter | Optimus Digital USB-to-RS485, reference `0104110000090720`; installed bridge identifies as CH340, `1a86:7523` |
 | Serial parameters | 9600 baud, 8 data bits, no parity, 1 stop bit |
 | Modbus address | 1 by default |
 | Read function | `0x03` — holding registers |
 
-The CH340 USB identifier alone does **not** prove that an adapter exposes
-RS485 electrically; use an actual USB-to-RS485 adapter and the controller's
-documented wiring. Connector pin orientation has not been verified by this
-project, so no universal RJ12 pinout is provided.
+The owner identified the adapter and confirmed the controller's published RJ12
+pinout on 14 September 2026: **pin 5 = D−, pin 6 = D+**, pins 3–4 = GND,
+and pins 1–2 = accessory VDD. Use the numbered plug/socket drawings in the
+manuals to identify positions; the views are mirrored. This is specific to the
+documented controller family, not a universal RS485 connector pinout.
+
+<img src="docs/images/optimus-usb-rs485.jpg" alt="Optimus Digital USB-A to RS485 adapter with two screw terminals" width="280">
+
+See the [hardware, adapter specifications, and wiring guide](docs/hardware.md)
+for the connection diagram, photo source, and limits of the available specifications.
+The [reference library](docs/third-party.md) includes downloadable WattCycle,
+Helios, and matching HQST protocol PDFs.
 
 Other WattCycle models, HQST controllers, and Helios controllers are **not
 hardware-tested here**. A matching HQST protocol document helped identify the
@@ -158,7 +166,8 @@ and changes. The deployed application itself does not use Node.js.
 
 ## License and attribution
 
-[MIT](LICENSE). Independent community software, not affiliated with or endorsed
-by WattCycle, HQST, or Helios. Third-party manuals are linked in the
-[protocol reference](docs/protocol.md), not redistributed or covered by this
-project's license.
+[MIT](LICENSE) for original project code and documentation. Independent community
+software, not affiliated with or endorsed by WattCycle, HQST, Helios, or Optimus
+Digital. Bundled third-party manuals and the retailer photograph retain their
+respective rights and are not covered by the project's MIT license. See
+[third-party attribution and sources](docs/third-party.md).

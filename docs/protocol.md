@@ -7,6 +7,8 @@ guarantee that every controller sold as M2430 implements the same firmware.
 
 ## Wire format
 
+For the physical RJ12 connection and adapter, see [hardware and wiring](hardware.md).
+
 - 9600 baud, 8 data bits, no parity, 1 stop bit.
 - Slave address 1 on the tested controller.
 - Function `0x03` reads holding registers.
@@ -62,9 +64,19 @@ This packet is also used as a regression fixture.
 
 ## Reference documents and compatibility limits
 
+The [reference library](third-party.md) contains local copies of all three PDFs,
+their original URLs, and the relevant pinout page numbers.
+
 - [WattCycle 30 A MPPT product page](https://www.wattcycle.com/products/wattcycle-30a-mppt-12v-24v-solar-charge-controller)
 - [WattCycle downloads](https://www.wattcycle.com/pages/downloads)
 - [Matching MPPT Modbus protocol distributed for HQST, mirrored by Device.report (PDF)](https://device.report/m/f7478c66f5451bc15e250c04e6beab0269f54fd92659617f82bcf8d06fd19865.pdf)
+- [WattCycle manual (local PDF)](manuals/WattCycle-30A-MPPT-User-Manual.pdf)
+- [Helios N-series manual (local PDF)](manuals/Helios-MPPT-N-Series-User-Manual.pdf)
+
+The model family points to Helios New Energy as the likely OEM; that inference
+is not an explicit WattCycle-to-Helios manufacturing confirmation. The device
+reports `M-2430N`, while WattCycle markets it as M2430. Matching documentation
+does not replace the reader's model check.
 
 The HQST document's telemetry layout matches the observed main fields; this
 does not establish the original manufacturer or compatibility with all HQST
@@ -76,6 +88,8 @@ Do not substitute an SRNE register map solely because some identification
 addresses match: in this device, `0x0100` is nominal system voltage, while the
 SRNE map considered during discovery uses that location for battery percentage.
 
-No configuration-write behavior, charging setpoints, load switching, firmware
-updates, or connector pinout has been validated here. The reader issues only
-read requests and checks the model before decoding telemetry.
+The published connector pinout is now documented and owner-confirmed; see the
+hardware guide for the scope of that confirmation. No configuration-write
+behavior, charging setpoints, load switching, or firmware updates have been
+validated here. The reader issues only read requests and checks the model
+before decoding telemetry.

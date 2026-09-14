@@ -30,5 +30,6 @@ venv/
 .vscode/
 node_modules/
 
-# Link to third-party manuals instead of redistributing them.
+# Keep reference manuals in their attributed documentation folder only.
 *.pdf
+!docs/manuals/*.pdf
