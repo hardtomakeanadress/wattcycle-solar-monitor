@@ -72,6 +72,21 @@ If `SOLAR_DATABASE` is set, use that path instead. Reading frequency is once per
 minute: about 525,600 samples per non-leap year if collection runs continuously.
 Disk usage depends on the stored JSON and SQLite overhead; monitor free space.
 
+The retention target is **at least five years**. The application never purges
+samples by age. At 2,629,800 samples over five average years, a measured database
+cost of about 852 bytes/sample projects to **2.24 GB**. This installation had
+25.7 GB free when measured on 14 September 2026. Other applications, OS updates,
+and backups consume additional space; inspect the dashboard's storage figures
+and `df -h` periodically. Keeping two full five-year backup copies would add
+roughly another 4.5 GB at that measured rate.
+
+Over the years, collection retries failed reads and resumes at service startup.
+An outage leaves a gap; the application cannot reconstruct readings it never
+received. Standard OS maintenance such as package jobs, log rotation, temporary
+file cleanup, and filesystem maintenance does not back up this database. Keep
+an off-device backup and check that it can be restored. No automatic solar-data
+backup, disk expansion, SD-card replacement, or recovery service is installed.
+
 Make a consistent backup with Python's SQLite backup API, even while the
 dashboard is collecting. Run from the repository root:
 

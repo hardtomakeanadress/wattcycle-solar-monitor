@@ -31,7 +31,10 @@ flowchart LR
   field, load state, and raw fault bits.
 - **One-minute collection:** one background reader regardless of browser count.
 - **Long-term storage:** every successful reading is retained indefinitely,
-  subject to available disk space. The graph shows the most recent 24 hours.
+  meeting a minimum five-year retention target subject to available storage.
+- **History for every measured metric:** 18 measurement/status charts, with
+  charging power, battery voltage, and solar input voltage shown by default.
+  Browse 24 hours, 7 days, 30 days, a year, all history, or custom local dates.
 - **Read-only controller access:** only Modbus function `0x03`; no charging
   setpoints or load controls are written.
 - **Reliable framing:** Modbus CRC, slave ID, response length, and model checks.
@@ -40,8 +43,8 @@ flowchart LR
 - **Small footprint:** works on the tested 32-bit Raspberry Pi 2; responsive,
   self-contained HTML with no CDN, external fonts, or analytics.
 - **Automatic startup:** optional systemd user service.
-- **JSON endpoints:** build your own integrations using `/api/status` and
-  `/api/history`.
+- **JSON endpoints:** `/api/status`, `/api/history/range`, and the compatible
+  legacy `/api/history` endpoint.
 
 ## Hardware and compatibility
 
@@ -137,9 +140,18 @@ is no age-based deletion or downsampling of the stored records. Available disk
 space and functioning storage are required; keep a backup on another device
 for data you want to retain for years. See [backup and maintenance](docs/deployment.md#backups).
 
-The graph shows the latest 24 hours using the last reading from each five-minute
-bucket; it does not currently provide a date-range picker for older data.
-Older records remain queryable in the database.
+The history controls show any saved date range and any measured metric, or all
+18 charts together. Dates and labels use the browser's local time. Each query
+returns at most 1,000 representative readings, using the last sample in each
+display bucket. This limits browser work on the Pi 2; it does not delete or
+downsample stored records. Displayed extrema describe those representative
+readings, not every underlying sample. Narrow the dates to inspect detail.
+See [history browsing, metrics, and API](docs/history.md).
+
+The page shows saved date coverage, selected sample count, database size, and
+free space. A measured 852 bytes per sample suggests about **2.24 GB for five
+years** at one-minute intervals; growth varies with reading size and database
+overhead. This is a capacity estimate, not a guarantee against card failure.
 
 Battery percentage is the controller's estimate, not a BMS or shunt measurement.
 The battery-temperature register does not prove that an external sensor is

@@ -4,6 +4,8 @@
 <title>WattCycle Solar Monitor · RS485 / Modbus</title>
 <style>
 :root{color-scheme:dark;font-family:system-ui,-apple-system,sans-serif;background:#101713;color:#edf3e8}*{box-sizing:border-box}body{margin:0}main{max-width:1100px;margin:auto;padding:38px 24px}header{display:flex;justify-content:space-between;align-items:center;gap:18px;margin-bottom:40px}.brand{font-size:15px;letter-spacing:3px;text-transform:uppercase}.brand span{color:#d6ee9b}h1{font-size:clamp(32px,5vw,48px);letter-spacing:-2px;margin:12px 0}.sub,small{color:#9eafa2}.pill{border:1px solid #43533b;border-radius:30px;padding:9px 14px;font-size:13px;color:#d6ee9b;white-space:nowrap}.warning{background:#423520;color:#ffdda0;padding:14px 18px;border-radius:12px;margin-bottom:18px}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}.card,.panel{background:#19231d;border:1px solid #2a372d;border-radius:18px;padding:23px}.card.primary{background:#d6ee9b;color:#182316}.label{font-size:13px;color:#a9b9ac}.primary .label,.primary small{color:#4b5e32}.value{font-size:clamp(28px,4vw,42px);font-weight:550;letter-spacing:-1.5px;margin:18px 0 7px}.unit{font-size:17px;letter-spacing:0;margin-left:4px;font-weight:400}.panels{display:grid;grid-template-columns:1.7fr 1fr;gap:14px;margin-top:14px}h2{font-size:16px;font-weight:500;margin:0 0 20px}.charthead{display:flex;justify-content:space-between;gap:12px}svg{display:block;width:100%;height:210px}text{fill:#9eafa2;font:12px system-ui}.row{display:flex;justify-content:space-between;gap:12px;padding:13px 0;border-bottom:1px solid #2a372d;font-size:14px}.row:last-child{border:0}.row span{color:#a9b9ac}.row strong{font-weight:500;text-align:right}footer{display:flex;justify-content:space-between;gap:14px;margin-top:25px;font-size:12px;color:#8da091}.empty{color:#9eafa2;font-size:14px;padding:30px 0}.hidden{display:none}@media(max-width:750px){.grid{grid-template-columns:repeat(2,1fr)}.panels{grid-template-columns:1fr}header{align-items:flex-start}.pill{font-size:11px}main{padding:25px 16px}.card{padding:18px}footer{flex-direction:column}}
+
+.history-panel{margin-top:18px}.history-controls{display:flex;flex-wrap:wrap;align-items:end;gap:12px;margin:18px 0}.history-controls label{display:flex;flex-direction:column;gap:6px;font-size:13px;color:#a9b9ac}select,input,button{font:inherit;color:#edf3e8;background:#101713;border:1px solid #52634f;border-radius:8px;padding:10px}button{cursor:pointer;background:#d6ee9b;color:#182316;border:0}button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid #d6ee9b;outline-offset:3px}.charts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.metric-chart{min-width:0;background:#101713;border:1px solid #2a372d;border-radius:12px;padding:14px}.metric-chart h3{font-size:15px;margin:0 0 8px}.metric-chart svg{height:auto;aspect-ratio:600/250}.metric-chart .summary{font-size:12px;color:#a9b9ac}.history-note{font-size:13px;color:#a9b9ac;line-height:1.6}.custom-range{display:flex;flex-wrap:wrap;align-items:end;gap:12px}.custom-range.hidden{display:none}.history-message{padding:12px 0;color:#ffdda0}.history-message:empty{display:none}.metric-chart text{font-size:16px}.point-detail{font-size:13px;color:#d6ee9b;min-height:18px;margin-top:8px}.panels{grid-template-columns:1fr}.charthead{flex-wrap:wrap} @media(max-width:750px){.metric-chart text{font-size:22px}.charts{grid-template-columns:1fr}.history-controls label{max-width:100%}select{max-width:100%}}
 </style>
 <main>
 <header><div><div class="brand">WattCycle <span>☀</span> Solar</div><h1>A little closer to the sun.</h1><div class="sub">Your solar controller, at a glance.</div></div><div class="pill" id="connection" role="status">Connecting…</div></header>
@@ -14,14 +16,26 @@
 <div class="card"><div class="label">SOLAR INPUT</div><div class="value"><span id="PV_V">—</span><span class="unit">V</span></div><small>Charge current <span id="charge_A">—</span> A</small></div>
 <div class="card"><div class="label">GENERATED TODAY</div><div class="value"><span id="today_generation_Wh">—</span><span class="unit">Wh</span></div><small>Peak <span id="today_peak_W">—</span> W today</small></div>
 </section>
-<div class="panels"><section class="panel"><div class="charthead"><h2>Charging power</h2><small>Last 24 hours · W</small></div><svg id="chart" viewBox="0 0 600 210" role="img" aria-label="Charging power over the last 24 hours"></svg><div id="empty" class="empty">History will appear as readings arrive.</div></section>
-<section class="panel"><h2>Controller status</h2><div class="row"><span>Charge stage</span><strong id="stage">—</strong></div><div class="row"><span>Controller temperature</span><strong id="temp">—</strong></div><div class="row"><span>Battery temperature field</span><strong id="batterytemp">—</strong></div><div class="row"><span>DC load</span><strong id="load">—</strong></div><div class="row"><span>Faults</span><strong id="faults">—</strong></div></section></div>
+<section class="panel history-panel" aria-label="Measurement history">
+<div class="charthead"><h2>Explore your history</h2><small>One-minute collection · history kept indefinitely</small></div>
+<div class="history-controls">
+<label>Time range<select id="range" onchange="rangeChanged()"><option value="86400">Last 24 hours</option><option value="604800">Last 7 days</option><option value="2592000">Last 30 days</option><option value="31557600">Last year</option><option value="all">All saved history</option><option value="custom">Custom dates</option></select></label>
+<label>Measurements<select id="metric" onchange="renderHistory()"><option value="overview">Overview: charging, battery &amp; solar</option><option value="all">Every metric</option></select></label>
+<div id="custom-range" class="custom-range hidden"><label>From (local time)<input id="start" type="datetime-local"></label><label>Until (local time)<input id="end" type="datetime-local"></label><button type="button" onclick="loadHistory()">Apply dates</button></div>
+<button type="button" onclick="loadHistory()">Refresh history</button>
+</div>
+<div id="history-message" class="history-message" role="status">Loading history…</div>
+<p id="history-coverage" class="history-note"></p>
+<div id="charts" class="charts"></div>
+<p class="history-note">Solar input is panel voltage; charging power is the controller’s output to the battery. Daily energy counters reset each day. Long ranges show representative readings, so brief peaks and state changes may be omitted. Full minute readings stay in storage. Hover or tap a point for its value and time.</p>
+</section>
+<div class="panels"><section class="panel"><h2>Controller status</h2><div class="row"><span>Charge stage</span><strong id="stage">—</strong></div><div class="row"><span>Controller temperature</span><strong id="temp">—</strong></div><div class="row"><span>Battery temperature field</span><strong id="batterytemp">—</strong></div><div class="row"><span>DC load</span><strong id="load">—</strong></div><div class="row"><span>Faults</span><strong id="faults">—</strong></div></section></div>
 <footer><span id="identity">WattCycle · M-2430N</span><span id="updated">Waiting for first reading</span></footer>
 </main>
 <script>
 const $ = id => document.getElementById(id);
 const put = (id, value) => $(id).textContent = value;
-let status = null, receivedAt = 0, connected = false, historyRows = null;
+let status = null, receivedAt = 0, connected = false, historyRows = null, historyData = null, historyRequest = 0;
 
 async function getJSON(url) {
   const controller = new AbortController();
@@ -78,41 +92,114 @@ async function refresh() {
   }
 }
 
-function draw(rows) {
-  $('empty').classList.toggle('hidden', rows.length > 0);
-  put('empty', 'History will appear as readings arrive.');
-  const end = status ? status.server_time_seconds + elapsed() : Date.now() / 1000;
-  const start = end - 86400, max = Math.max(10, ...rows.map(r => r.charge_W));
-  const x = t => 45 + (t - start) / 86400 * 540, y = v => 170 - v / max * 145;
-  let content = '';
+function escapeHTML(value) {
+  return String(value).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+}
+function number(value) { return Number(value).toLocaleString(undefined, {maximumFractionDigits: 2}); }
+function metricValue(metric, value) {
+  return metric.states ? (metric.states[value] ?? 'Unknown') : number(value) + (metric.unit ? ' ' + metric.unit : '');
+}
+function chart(metric, data) {
+  const rows = data.rows, key = metric.key;
+  const values = rows.filter(r => Number.isFinite(r[key]));
+  if (!values.length) return '<p class="empty">No recorded values for this metric in this range.</p>';
+  const low = Math.min(...values.map(r => r[key])), high = Math.max(...values.map(r => r[key]));
+  const pad = Math.max((high - low) * .08, Math.abs(high) * .005, .1);
+  const min = metric.states ? -.25 : (low >= 0 ? Math.max(0, low - pad) : low - pad), max = metric.states ? metric.states.length - .75 : high + pad;
+  const x = t => 65 + (t - data.start) / (data.end - data.start) * 515;
+  const y = v => 195 - (v - min) / (max - min) * 160;
+  let content = '', path = '', previous = null;
   for (let i = 0; i < 3; i++) {
-    const v = max * i / 2, yy = y(v);
-    content += `<line x1="45" y1="${yy}" x2="585" y2="${yy}" stroke="#2c3b30"/><text x="3" y="${yy + 4}">${Math.round(v)}</text>`;
+    const value = min + (max - min) * i / 2, yy = y(value);
+    content += `<line x1="65" y1="${yy}" x2="580" y2="${yy}" stroke="#2c3b30"/><text x="3" y="${yy + 4}">${escapeHTML(number(value))}</text>`;
   }
-  let path = '', previous = null;
   for (const r of rows) {
-    path += `${previous !== null && r.ts - previous < 600 ? 'L' : 'M'}${x(r.ts).toFixed(1)},${y(r.charge_W).toFixed(1)} `;
-    content += `<circle cx="${x(r.ts).toFixed(1)}" cy="${y(r.charge_W).toFixed(1)}" r="2" fill="#d6ee9b"/>`;
+    if (!Number.isFinite(r[key])) { previous = null; continue; }
+    const xx = x(r.ts).toFixed(1), yy = y(r[key]).toFixed(1);
+    const connected = previous !== null && r.ts - previous < Math.max(180, data.bucket_seconds * 2);
+    // States and daily counters are drawn as steps; outages are not joined.
+    const step = metric.states || key.startsWith('today_') || key === 'fault_bits';
+    path += connected ? (step ? `H${xx} V${yy} ` : `L${xx},${yy} `) : `M${xx},${yy} `;
+    const label = `${new Date(r.ts * 1000).toLocaleString()}: ${metricValue(metric, r[key])}`;
+    content += `<circle cx="${xx}" cy="${yy}" r="3" fill="#d6ee9b" data-value="${escapeHTML(label)}"><title>${escapeHTML(label)}</title></circle>`;
     previous = r.ts;
   }
-  content += `<path d="${path}" fill="none" stroke="#d6ee9b" stroke-width="2.5"/>`;
-  for (let i = 0; i < 3; i++) {
-    const t = start + i * 43200;
-    content += `<text x="${45 + i * 270}" y="201" text-anchor="${i === 0 ? 'start' : i === 2 ? 'end' : 'middle'}">${new Date(t * 1000).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}</text>`;
+  content += `<path d="${path}" fill="none" stroke="#d6ee9b" stroke-width="2" pointer-events="none"/>`;
+  const narrow = typeof window !== 'undefined' && window.innerWidth < 750;
+  const ticks = narrow ? 1 : 2;
+  for (let i = 0; i <= ticks; i++) {
+    const date = new Date((data.start + i * (data.end - data.start) / ticks) * 1000);
+    const label = data.end - data.start > 172800 ? date.toLocaleDateString() : date.toLocaleString([], {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+    content += `<text x="${65 + i * 515/ticks}" y="231" text-anchor="${i === 0 ? 'start' : i === ticks ? 'end' : 'middle'}">${escapeHTML(label)}</text>`;
   }
-  $('chart').innerHTML = content;
+  const summary = metric.states ? metric.states.map((name,i) => `${i}: ${name}`).join(' · ')
+    : `Displayed min ${metricValue(metric, low)} · max ${metricValue(metric, high)}`;
+  return `<svg viewBox="0 0 600 250" onclick="inspectPoint(event)" role="img" aria-label="${escapeHTML(metric.label)} history">${content}</svg><div class="summary">${escapeHTML(summary)}</div><div class="point-detail" aria-live="polite">Latest displayed: ${escapeHTML(metricValue(metric,values[values.length-1][key]))}</div>`;
 }
-
-async function history() {
-  try {
-    historyRows = await getJSON('/api/history');
-    draw(historyRows);
-  } catch (error) {
-    $('empty').classList.remove('hidden');
-    put('empty', 'History temporarily unavailable. Retrying automatically.');
-  } finally {
-    setTimeout(history, 60000);
+function inspectPoint(event) {
+  const point = event.target.closest('circle[data-value]');
+  if (point) point.closest('.metric-chart').querySelector('.point-detail').textContent = point.getAttribute('data-value');
+}
+function renderHistory() {
+  if (!historyData) return;
+  const chosen = $('metric').value || 'overview';
+  const overview = ['charge_W','battery_V','PV_V'];
+  const metrics = historyData.metrics.filter(m => chosen === 'all' || (chosen === 'overview' ? overview.includes(m.key) : m.key === chosen));
+  $('charts').innerHTML = metrics.map(m => `<article class="metric-chart"><h3>${escapeHTML(m.label)}${m.unit ? ' · '+escapeHTML(m.unit) : ''}</h3>${chart(m,historyData)}</article>`).join('');
+}
+function serverNow() { return status ? status.server_time_seconds + elapsed() : Date.now()/1000; }
+function localInput(seconds) {
+  const d = new Date(seconds*1000);
+  return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16);
+}
+function rangeChanged() {
+  const custom = $('range').value === 'custom';
+  $('custom-range').classList.toggle('hidden', !custom);
+  if (custom) {
+    if (!$('start').value) $('start').value = localInput(serverNow()-86400);
+    if (!$('end').value) $('end').value = localInput(serverNow());
+    return;
   }
+  loadHistory();
+}
+async function loadHistory() {
+  const request = ++historyRequest;
+  const range = $('range').value || '86400';
+  let query;
+  if (range === 'all') query = 'range=all';
+  else {
+    const end = range === 'custom' ? new Date($('end').value).getTime()/1000 : serverNow();
+    const start = range === 'custom' ? new Date($('start').value).getTime()/1000 : end-Number(range);
+    if (!Number.isFinite(start) || !Number.isFinite(end) || start >= end) {
+      put('history-message','Choose a valid start date before the end date.');
+      return;
+    }
+    query = `start=${start}&end=${end}`;
+  }
+  put('history-message','Loading history…');
+  try {
+    const data = await getJSON('/api/history/range?'+query);
+    if (request !== historyRequest) return; // Ignore a slower previous date-range response.
+    historyData = data;
+    const selection = $('metric').value || 'overview';
+    $('metric').innerHTML = '<option value="overview">Overview: charging, battery &amp; solar</option><option value="all">Every metric</option>' + data.metrics.map(m => `<option value="${escapeHTML(m.key)}">${escapeHTML(m.label)}</option>`).join('');
+    $('metric').value = selection;
+    put('history-message', data.sample_count ? '' : 'No readings saved in this date range.');
+    const coverage = data.available_start == null ? 'No saved history yet.' : `Saved history: ${new Date(data.available_start*1000).toLocaleString()} – ${new Date(data.available_end*1000).toLocaleString()}.`;
+    const storage = data.storage ? ` Database ${(data.storage.database_bytes/1e6).toFixed(1)} MB · ${(data.storage.free_bytes/1e9).toFixed(1)} GB free.` : '';
+    put('history-coverage', `${coverage} ${number(data.sample_count)} readings in selected range; ${data.rows.length} displayed (last reading per ${number(data.bucket_seconds/60)} min).${storage}`);
+    renderHistory();
+  } catch (error) {
+    if (request !== historyRequest) return;
+    historyData = null;
+    $('charts').innerHTML = '';
+    put('history-coverage','');
+    put('history-message','History temporarily unavailable. Retrying automatically.');
+  }
+}
+async function history() {
+  await loadHistory();
+  setTimeout(history, 60000);
 }
 
 refresh().then(history);
