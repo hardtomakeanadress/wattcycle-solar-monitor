@@ -1,0 +1,3 @@
+# Preserve reference assets byte-for-byte and avoid textual PDF diffs.
+*.pdf binary
+*.jpg binary
