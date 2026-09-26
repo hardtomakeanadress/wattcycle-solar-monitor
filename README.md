@@ -34,7 +34,9 @@ flowchart LR
   meeting a minimum five-year retention target subject to available storage.
 - **History for every measured metric:** 18 measurement/status charts, with
   charging power, battery voltage, and solar input voltage shown by default.
-  Browse 24 hours, 7 days, 30 days, a year, all history, or custom local dates.
+  Browse 15 minutes, an hour, 6 hours, 24 hours, 7 days, 30 days, a year, all
+  history, or custom local dates. Zoom to five-minute windows, step backward
+  and forward, and inspect readings by moving across or tapping a chart.
 - **Read-only controller access:** only Modbus function `0x03`; no charging
   setpoints or load controls are written.
 - **Reliable framing:** Modbus CRC, slave ID, response length, and model checks.

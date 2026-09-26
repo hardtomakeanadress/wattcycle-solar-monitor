@@ -8,11 +8,25 @@ as the storage remains usable. Backups are described in [deployment](deployment.
 ## Using the page
 
 1. Open the dashboard and scroll to **Explore your history**.
-2. Select 24 hours, 7 days, 30 days, a year, all saved history, or custom dates.
+2. Select 15 minutes, an hour, 6 hours, 24 hours, 7 days, 30 days, a year,
+   all saved history, or custom dates. The default remains 24 hours.
 3. For custom dates, enter a start and end in the browser's local time, then
-   choose **Apply dates**. The end is exclusive.
+   choose **Apply dates**. The end is exclusive. Automatic refresh waits while
+   you edit dates; it does not apply an unfinished date range.
 4. Keep the three-chart overview, choose an individual measurement, or choose
-   **Every metric**. Hover or tap a point for its timestamp and value.
+   **Every metric**. An individual measurement fills the chart width. Move
+   across or tap anywhere in a chart to inspect its nearest saved reading;
+   a vertical marker shows which timestamp was selected.
+5. **Zoom in** halves the displayed period, down to a five-minute window.
+   **Zoom out** doubles it. **Earlier** and **Later** move one window at a time.
+   These views stay on fixed dates while new readings arrive. **Latest** keeps
+   the current window length and follows incoming data again.
+
+Short views use hour/minute labels and vertical time grid lines, with fewer
+labels on narrow phone screens. The full selected dates and timezone appear
+above the charts, including when a window crosses midnight or a clock change.
+Zoom changes only the displayed time window. The collector still reads once
+per minute; there are no measurements between those saved readings.
 
 The page shows the earliest/latest saved dates, the number of readings in the
 selected period, displayed-point count, display interval, database size, and

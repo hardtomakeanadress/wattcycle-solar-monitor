@@ -102,10 +102,98 @@ async function runFrontendTests() {
   await loadHistory();
   assert(requestedURL.endsWith('range=all'), 'All-history query incorrect');
 
+  // Short presets request the actual minute records using the Pi's clock.
+  for (const seconds of [900,3600,21600]) {
+    $('range').value = String(seconds);
+    await loadHistory();
+    assert(requestedURL.includes('start='+(fixture.server_time_seconds-seconds)), 'Short preset has the wrong start');
+    assert(requestedURL.includes('end='+fixture.server_time_seconds), 'Short preset has the wrong end');
+  }
+  const oneHour = {start:1789308000,end:1789311600};
+  const zoomed = navigationWindow(oneHour,'in',oneHour.end);
+  assert(zoomed.end-zoomed.start === 1800, 'Zoom does not halve the visible hour');
+  assert((zoomed.start+zoomed.end)/2 === (oneHour.start+oneHour.end)/2, 'Zoom loses its center');
+  assert(navigationWindow(zoomed,'out',oneHour.end).start === oneHour.start, 'Zoom out does not restore the window');
+  let smallest = oneHour;
+  for (let i=0;i<12;i++) smallest = navigationWindow(smallest,'in',oneHour.end);
+  assert(smallest.end-smallest.start === 300, 'Zoom passes the five-minute limit');
+  const earlier = navigationWindow(oneHour,'earlier',oneHour.end);
+  const later = navigationWindow(earlier,'later',oneHour.end);
+  assert(earlier.end === oneHour.start && later.start === oneHour.start, 'Panning skips or distorts the window');
+  assert(navigationWindow({start:0,end:900},'earlier',900).start === 0, 'Panning produces negative Unix dates');
+
+  const tickStart = Math.floor(oneHour.start/3600)*3600;
+  const ticks = timeTicks(tickStart,tickStart+900);
+  assert(ticks.length >= 3 && ticks.every(t=>t%300===0), '15-minute view lacks useful five-minute ticks');
+  assert(timeTicks(tickStart,tickStart+3600).every(t=>t%900===0), 'Hour view lacks quarter-hour ticks');
+  assert(timeTicks(tickStart,tickStart+900,true).length <= 4, 'Mobile time labels are overcrowded');
+  for (const offset of [0,1,61,421]) {
+    assert(timeTicks(tickStart+offset,tickStart+offset+900,true).length >= 3, 'Unaligned mobile window has too few time labels');
+    assert(timeTicks(tickStart+offset,tickStart+offset+60,true).length >= 2, 'One-minute custom window lacks boundary labels');
+  }
+  assert(timeTicks(tickStart,tickStart+30*86400).length >= 2, 'Month view has too few time labels');
+  assert(/^\d\d:\d\d$/.test(timeLabel(tickStart,900)), 'Short view does not show clear hours and minutes');
+  assert(chart(metric,{...historyFixture,...oneHour,rows:[{ts:oneHour.start+60,controller_C:0}]}).includes('time-grid'), 'Time grid is missing');
+  const inspectRows = [{ts:100,charge_W:0},{ts:160,charge_W:null},{ts:220,charge_W:10}];
+  assert(nearestReading(inspectRows,'charge_W',150).ts === 100, 'Nearest reading loses zero or selects missing value');
+  assert(nearestReading(inspectRows,'charge_W',219).ts === 220, 'Nearest reading inspection misses data');
+  assert(nearestReading(inspectRows,'absent',150) === null, 'Missing metric invents a reading');
+  const attributes = {}, detailElement = {};
+  historyData = {...historyFixture,start:100,end:220,rows:inspectRows};
+  inspectPoint({clientX:580,currentTarget:{
+    getBoundingClientRect:()=>({left:0,width:600}), getAttribute:()=> 'charge_W',
+    closest:()=>({querySelector:()=>detailElement}),
+    querySelector:()=>({setAttribute:(k,v)=>{attributes[k]=v;}})
+  }});
+  assert(detailElement.textContent.includes('10 W') && attributes.x1 === 580 && attributes.visibility === 'visible', 'Tap/crosshair does not inspect the plotted sample');
+
+  // Selecting a single measurement gives it the full chart width.
+  $('metric').value = 'charge_W'; renderHistory();
+  assert($('charts').classList.contains('single'), 'Single metric stays cramped');
+  $('metric').value = 'overview'; renderHistory();
+  assert(!$('charts').classList.contains('single'), 'Overview incorrectly retains single-chart layout');
+
+  // Navigation writes minute inputs and fetches the selected window.
+  historyData = {...historyFixture,...oneHour,rows};
+  await navigateHistory('in');
+  assert($('range').value === 'custom' && requestedURL.includes('start='+zoomed.start), 'Zoom did not load the selected dates');
+  assert(!$('custom-range').classList.contains('hidden'), 'Zoom hides its editable dates');
+  historyData = {...historyFixture,...oneHour,rows};
+  await navigateHistory('latest');
+  assert($('range').value === 'follow' && followSeconds === 3600, 'Latest did not preserve the current zoom');
+  monotonicNow += 60000;
+  await loadHistory();
+  assert(requestedURL.includes('end='+(fixture.server_time_seconds+60)), 'Latest stops following incoming readings');
+  monotonicNow -= 60000;
+
+  // Fixed UTC windows must survive local daylight-saving clock repetition.
+  const autumnStart = Date.parse('2026-10-25T00:00:00Z')/1000;
+  historyData = {...historyFixture,start:autumnStart,end:autumnStart+7200,rows};
+  await navigateHistory('in');
+  assert(requestedURL.includes('start='+(autumnStart+1800)) && requestedURL.includes('end='+(autumnStart+5400)), 'DST clock repetition distorts zoom');
+
+  // A refresh must never apply dates while the user is still editing them.
+  editRange();
+  const beforeDraftRefresh = requestedURL;
+  $('start').value = '2026-09-12T01:00'; $('end').value = '2026-09-12T02:00';
+  await history();
+  assert(requestedURL === beforeDraftRefresh && $('zoom-in').disabled, 'Automatic refresh submitted a date draft');
+  await loadHistory();
+  assert(requestedURL.includes('start='+new Date('2026-09-12T01:00').getTime()/1000), 'Apply dates ignores edited times');
+  assert(!rangeDraft && !historyLoading, 'Applied dates leave navigation blocked');
+
+  failedFetch = true;
+  await loadHistory();
+  assert($('zoom-in').disabled && $('history-window').textContent === '', 'Failed request leaves misleading navigation');
+  failedFetch = false;
+  await loadHistory();
+  assert(!$('zoom-in').disabled, 'Navigation does not recover after a failed request');
+
   // A slower response for the previous range must not replace the latest range.
   const originalFetch = fetch, responses = [];
   fetch = url => new Promise(resolve => responses.push(resolve));
   const olderRequest = loadHistory();
+  assert($('zoom-in').disabled, 'Navigation is active while data is loading');
   const newerRequest = loadHistory();
   const newest = {...historyFixture, rows, sample_count: 22};
   responses[1]({ok:true,json:async()=>newest});
@@ -113,6 +201,12 @@ async function runFrontendTests() {
   responses[0]({ok:true,json:async()=>({...newest,sample_count:11})});
   await olderRequest;
   assert(historyData.sample_count === 22, 'Old range response replaced the newer range');
+  const draftRequest = loadHistory();
+  editRange();
+  responses[2]({ok:true,json:async()=>({...newest,sample_count:33})});
+  await draftRequest;
+  assert(historyData.sample_count === 22 && rangeDraft, 'Pending response overwrote an edited range');
+  rangeDraft = false;
   fetch = originalFetch;
 
   // No follow-up refresh should be scheduled until the slow request completes.
@@ -125,5 +219,5 @@ async function runFrontendTests() {
   await request;
   pendingFetch = null;
   assert(scheduled.filter(task => task.delay === 5000).length === 1, 'Refresh did not reschedule');
-  return 'PASS: freshness, errors, all metrics, date ranges, zero/negative/missing values, gaps, escaping, and scheduling';
+  return 'PASS: freshness, errors, metrics, short presets, zoom/pan/follow, DST, time ticks, point inspection, date drafts, slow responses, gaps, escaping, and scheduling';
 }
