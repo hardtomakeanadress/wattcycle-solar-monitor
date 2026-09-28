@@ -66,6 +66,36 @@ async function runFrontendTests() {
   assert($('warning').textContent.includes('could not save'), 'Storage failure hidden');
   fixture.error = null;
 
+  // Sensor freshness is independent of solar data and the browser's wall clock.
+  fixture.sensor = {enabled:true, name:'Cabana climate', reading:null, error:null,
+    age_seconds:null, stale:true, stale_after_seconds:180};
+  await refresh();
+  assert($('sensor-temperature').textContent === '—', 'Missing sensor shown as zero');
+  assert($('climate-status').textContent === 'Connecting', 'Initial sensor state incorrect');
+  assert($('connection').textContent === '● Live', 'Sensor affects solar status');
+  fixture.sensor.reading = {temperature_C:0,humidity_percent:0,battery_V:3.136,battery_percent_estimate:100};
+  fixture.sensor.age_seconds = 5; fixture.sensor.stale = false;
+  await refresh();
+  assert($('sensor-temperature').textContent === '0.0', 'Zero temperature omitted');
+  assert($('sensor-humidity').textContent === 0, 'Zero humidity omitted');
+  assert($('sensor-battery-estimate').textContent.includes('≈'), 'Estimate presented as exact');
+  assert($('climate-status').textContent === 'Live', 'Fresh sensor not live');
+  monotonicNow += 176000; freshness();
+  assert($('climate-status').textContent === 'Last known', 'Sensor age does not advance');
+  fixture.sensor.error = 'Sensor unavailable. Retrying every minute.';
+  await refresh();
+  assert($('climate-message').textContent.includes('unavailable'), 'Sensor failure hidden');
+  assert($('sensor-temperature').textContent === '0.0', 'Failure erased last reading');
+  assert($('connection').textContent === '● Live', 'Sensor failure affects solar status');
+  fixture.sensor.error = null; fixture.sensor.reading.temperature_C = -5;
+  await refresh();
+  assert($('sensor-temperature').textContent === '-5.0', 'Negative temperature corrupted');
+  assert($('climate-status').textContent === 'Live', 'Sensor did not recover');
+  failedFetch = true; await refresh();
+  assert($('climate-status').textContent === 'Offline', 'Network failure leaves sensor live');
+  failedFetch = false; delete fixture.sensor; await refresh();
+  assert($('climate').classList.contains('hidden'), 'Unconfigured sensor visible');
+
   failedFetch = true;
   await history();
   assert($('history-message').textContent.includes('unavailable'), 'History failure hidden');

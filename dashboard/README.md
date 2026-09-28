@@ -8,6 +8,12 @@ once per minute and saves each successful JSON snapshot in SQLite. Browser
 requests return cached readings; opening more tabs does not create more Modbus
 pollers. The serial connection is released between readings.
 
+When `BLUETOOTH_SENSOR_ADDRESS` is configured, `bluetooth_sensor.py` runs a
+separate one-minute collector using the existing BlueZ command-line tools.
+`/api/status` includes a `sensor` object with its own reading, error, age, and
+staleness. Unconfigured installations hide the climate panel. Bluetooth reads
+do not touch the serial adapter or SQLite; sensor values are cached in memory.
+
 The database retains all samples indefinitely. It has one table:
 
 ```sql

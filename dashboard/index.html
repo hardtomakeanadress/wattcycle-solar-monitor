@@ -7,9 +7,19 @@
 
 .history-panel{margin-top:18px}.history-controls{display:flex;flex-wrap:wrap;align-items:end;gap:12px;margin:18px 0}.history-controls label{display:flex;flex-direction:column;gap:6px;font-size:13px;color:#a9b9ac}select,input,button{font:inherit;color:#edf3e8;background:#101713;border:1px solid #52634f;border-radius:8px;padding:10px}button{cursor:pointer;background:#d6ee9b;color:#182316;border:0}button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid #d6ee9b;outline-offset:3px}.charts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.metric-chart{min-width:0;background:#101713;border:1px solid #2a372d;border-radius:12px;padding:14px}.metric-chart h3{font-size:15px;margin:0 0 8px}.metric-chart svg{height:auto;aspect-ratio:600/250}.metric-chart .summary{font-size:12px;color:#a9b9ac}.history-note{font-size:13px;color:#a9b9ac;line-height:1.6}.custom-range{display:flex;flex-wrap:wrap;align-items:end;gap:12px}.custom-range.hidden{display:none}.history-message{padding:12px 0;color:#ffdda0}.history-message:empty{display:none}.metric-chart text{font-size:16px}.point-detail{font-size:13px;color:#d6ee9b;min-height:18px;margin-top:8px}.panels{grid-template-columns:1fr}.charthead{flex-wrap:wrap} @media(max-width:750px){.metric-chart text{font-size:22px}.charts{grid-template-columns:1fr}.history-controls label{max-width:100%}select{max-width:100%}}
 .history-navigation{display:flex;flex-wrap:wrap;gap:8px}.history-navigation button{background:#263629;color:#d6ee9b;border:1px solid #52634f;font-size:13px}button:disabled{opacity:.4;cursor:default}.charts.single{grid-template-columns:1fr}.metric-chart svg{touch-action:pan-y}.metric-chart .time-grid{stroke:#2c3b30;stroke-dasharray:3 5}.metric-chart .crosshair{stroke:#edf3e8;stroke-dasharray:4 4;pointer-events:none}.point-detail{line-height:1.5;min-height:40px}#history-window{color:#d6ee9b}
+.climate{display:grid;grid-template-columns:1.4fr 1fr 1fr 1fr;align-items:center;gap:22px;margin:0 0 18px;padding:24px;background:linear-gradient(115deg,#20302a,#19231d 70%);border:1px solid #3a4f41;border-radius:18px}.climate.hidden{display:none}.climate-title{display:flex;align-items:center;gap:10px;margin-bottom:9px}.climate-title h2{margin:0;font-size:17px}.climate-icon{width:28px;height:28px;color:#c1dfcf;flex:none}.climate small{font-size:12px;line-height:1.6}.climate-metric{border-left:1px solid #3a4f41;padding-left:24px;min-width:0}.climate-metric .label{font-size:12px}.climate-value{font-size:36px;letter-spacing:-1px;font-weight:550;margin:8px 0 0;font-variant-numeric:tabular-nums}.climate-value .unit{font-size:18px;color:#c1dfcf}.climate-battery .climate-value{font-size:26px;margin-bottom:4px}.climate-bottom{display:flex;align-items:center;gap:10px;margin-top:10px}.climate-status{font-size:11px;color:#c1dfcf;white-space:nowrap}.climate-status::before{content:'';display:inline-block;width:6px;height:6px;background:currentColor;border-radius:50%;margin-right:6px}.climate.stale .climate-status{color:#ffdda0}.climate.stale .climate-value{color:#b3bbb4}.climate-message{grid-column:1/-1;font-size:12px;color:#ffdda0;margin:0;line-height:1.6}.climate-message:empty{display:none}
+@media(max-width:750px){header{margin-bottom:26px}.climate{grid-template-columns:1fr 1fr;gap:20px 14px;padding:20px}.climate-intro{grid-column:1/-1;display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px}.climate-title{margin-bottom:3px}.climate-bottom{margin:0}.climate-metric{padding-left:0;border:0}.climate-humidity{padding-left:20px;border-left:1px solid #3a4f41}.climate-battery{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;gap:8px;border-top:1px solid #3a4f41;padding-top:14px}.climate-battery .climate-value{font-size:17px;margin:0;letter-spacing:0}.climate-battery .unit{font-size:14px}.climate-battery small{font-size:11px}.climate-value{font-size:34px}.climate-message{margin-top:-8px}}
+@media(max-width:360px){.climate-battery{flex-wrap:wrap}.climate-battery .label{flex-basis:100%}}
 </style>
 <main>
 <header><div><div class="brand">WattCycle <span>☀</span> Solar</div><h1>A little closer to the sun.</h1><div class="sub">Your solar controller, at a glance.</div></div><div class="pill" id="connection" role="status">Connecting…</div></header>
+<section id="climate" class="climate hidden" aria-labelledby="climate-name">
+<div class="climate-intro"><div><div class="climate-title"><svg class="climate-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M9 14.7V5a3 3 0 0 1 6 0v9.7a5 5 0 1 1-6 0Z"/><path d="M12 8v9"/><circle cx="12" cy="18" r="1.5" fill="currentColor" stroke="none"/></svg><h2 id="climate-name">Cabana climate</h2></div><small>Xiaomi temperature &amp; humidity</small></div><div class="climate-bottom"><span id="climate-status" class="climate-status" role="status">Connecting</span><small id="climate-updated">First reading pending</small></div></div>
+<div class="climate-metric"><div class="label">TEMPERATURE</div><div class="climate-value"><span id="sensor-temperature">—</span><span class="unit">°C</span></div></div>
+<div class="climate-metric climate-humidity"><div class="label">HUMIDITY</div><div class="climate-value"><span id="sensor-humidity">—</span><span class="unit">%</span></div></div>
+<div class="climate-metric climate-battery"><div class="label">SENSOR BATTERY</div><div class="climate-value"><span id="sensor-battery">—</span><span class="unit">V</span></div><small id="sensor-battery-estimate">Charge estimate pending</small></div>
+<p id="climate-message" class="climate-message" role="status"></p>
+</section>
 <div class="warning hidden" id="warning" role="alert"></div>
 <section class="grid" aria-label="Live measurements">
 <div class="card primary"><div class="label">CHARGING POWER</div><div class="value"><span id="charge_W">—</span><span class="unit">W</span></div><small id="charge_status">Waiting for controller</small></div>
@@ -64,6 +74,7 @@ async function getJSON(url) {
 function elapsed() { return Math.max(0, (performance.now() - receivedAt) / 1000); }
 
 function freshness() {
+  sensorFreshness();
   const reading = status?.reading;
   // Use the Pi's reported age; the phone/laptop clock may be wrong.
   const age = status?.age_seconds == null ? Infinity : status.age_seconds + elapsed();
@@ -77,6 +88,26 @@ function freshness() {
     const frequency = interval === 60 ? 'every minute' : `every ${interval} seconds`;
     put('updated', `Last reading ${new Date(reading.timestamp_utc).toLocaleString()} · ${frequency}`);
   }
+}
+
+function sensorFreshness() {
+  const sensor = status?.sensor;
+  $('climate').classList.toggle('hidden', !sensor?.enabled);
+  if (!sensor?.enabled) return;
+  put('climate-name', sensor.name);
+  const reading = sensor.reading;
+  const age = sensor.age_seconds == null ? Infinity : sensor.age_seconds + elapsed();
+  const bad = !connected || !reading || !!sensor.error || sensor.stale || age > sensor.stale_after_seconds;
+  $('climate').classList.toggle('stale', bad);
+  put('climate-status', !connected ? 'Offline' : !reading ? (sensor.error ? 'Unavailable' : 'Connecting') : bad ? 'Last known' : 'Live');
+  put('sensor-temperature', reading ? reading.temperature_C.toFixed(1) : '—');
+  put('sensor-humidity', reading ? reading.humidity_percent : '—');
+  put('sensor-battery', reading ? reading.battery_V.toFixed(3) : '—');
+  put('sensor-battery-estimate', reading ? `≈ ${reading.battery_percent_estimate}% charge` : 'Charge estimate pending');
+  const ago = age < 60 ? 'just now' : age < 3600 ? `${Math.floor(age/60)} min ago` : age < 86400 ? `${Math.floor(age/3600)} h ago` : `${Math.floor(age/86400)} d ago`;
+  put('climate-updated', reading ? `Read ${ago}` : 'First reading pending');
+  put('climate-message', !connected ? 'Dashboard connection lost. Showing the last received sensor reading.'
+    : sensor.error || (bad && reading ? 'Waiting for a fresh sensor reading. Retrying every minute.' : ''));
 }
 
 async function refresh() {

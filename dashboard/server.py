@@ -13,6 +13,7 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlsplit
+from bluetooth_sensor import XiaomiSensor
 
 ROOT = Path(__file__).resolve().parent
 READER = ROOT.parent / 'read_controller.py'
@@ -21,6 +22,8 @@ INTERVAL = 60
 STALE_AFTER = INTERVAL * 3
 LOCK = threading.Lock()
 STATE = {'reading': None, 'error': None, 'last_attempt': None}
+SENSOR = XiaomiSensor(os.environ.get('BLUETOOTH_SENSOR_ADDRESS', ''),
+                     os.environ.get('BLUETOOTH_SENSOR_NAME', 'Cabana climate'))
 
 # Measured scalar fields only: raw register arrays and connection metadata are
 # retained in SQLite but are not independent physical measurements.
@@ -169,6 +172,7 @@ def snapshot():
     age = None if reading is None else max(0, time.time() - datetime.datetime.fromisoformat(reading['timestamp_utc']).timestamp())
     data.update(age_seconds=age, stale=age is None or age > STALE_AFTER, server_time_seconds=time.time(),
                 stale_after_seconds=STALE_AFTER, poll_interval_seconds=INTERVAL)
+    data['sensor'] = SENSOR.snapshot()
     return data
 
 
@@ -221,6 +225,7 @@ if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
     initialize()
     threading.Thread(target=poll_loop, daemon=True).start()
+    SENSOR.start()
     server = ThreadingHTTPServer((os.environ.get('DASHBOARD_BIND', '0.0.0.0'), int(os.environ.get('DASHBOARD_PORT', '8080'))), Handler)
     server.daemon_threads = True
     logging.info('Dashboard listening on %s:%s', *server.server_address)

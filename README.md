@@ -45,6 +45,9 @@ flowchart LR
 - **Small footprint:** works on the tested 32-bit Raspberry Pi 2; responsive,
   self-contained HTML with no CDN, external fonts, or analytics.
 - **Automatic startup:** optional systemd user service.
+- **Optional Xiaomi climate panel:** live LYWSD03MMC temperature, humidity,
+  battery voltage, voltage-based charge estimate, and independent freshness.
+  Uses the host's existing BlueZ `gatttool` and `stdbuf` commands; no Python packages.
 - **JSON endpoints:** `/api/status`, `/api/history/range`, and the compatible
   legacy `/api/history` endpoint.
 
@@ -126,10 +129,23 @@ Configuration uses environment variables, inherited by the reader subprocess.
 | `SOLAR_DATABASE` | `dashboard/history.sqlite3` in this checkout | SQLite file; use an absolute path for custom storage |
 | `DASHBOARD_BIND` | `0.0.0.0` | Network interface to listen on |
 | `DASHBOARD_PORT` | `8080` | HTTP port |
+| `BLUETOOTH_SENSOR_ADDRESS` | empty (disabled) | Optional LYWSD03MMC Bluetooth address |
+| `BLUETOOTH_SENSOR_NAME` | `Cabana climate` | Climate panel title |
 
 Collection occurs every **60 seconds**. Browsers fetch cached status every five
 seconds and graph data every minute. Readings older than **180 seconds** are
 marked stale. These browser requests do not trigger additional serial reads.
+
+For an optional Xiaomi LYWSD03MMC sensor, set `BLUETOOTH_SENSOR_ADDRESS` in the
+service environment and restart the dashboard. Bluetooth must be powered on
+and unblocked, with `gatttool` and `stdbuf` already available on the host.
+A separate thread connects briefly once a minute, discovers the measurement
+and notification handles by UUID, and disconnects after the first valid reading.
+Sensor timeouts cannot block the solar collector. The last successful reading
+remains visible with a warning on failure; after three minutes it is stale.
+Sensor readings are live only and are not added to the solar history database.
+Charge percentage is a rough estimate from 2.1–3.1 V, clamped to 0–100%, using
+the [MiTemperature2 payload format](https://github.com/JsBergbau/MiTemperature2).
 
 The dashboard has no login or TLS and is intended for a trusted LAN or private
 VPN. For remote use, access that network through a VPN or add an authenticated
