@@ -32,7 +32,7 @@ flowchart LR
 - **One-minute collection:** one background reader regardless of browser count.
 - **Long-term storage:** every successful reading is retained indefinitely,
   meeting a minimum five-year retention target subject to available storage.
-- **History for every measured metric:** 18 measurement/status charts, with
+- **History for every measured metric:** 18 solar measurement/status charts plus optional climate history, with
   charging power, battery voltage, and solar input voltage shown by default.
   Browse 15 minutes, an hour, 6 hours, 24 hours, 7 days, 30 days, a year, all
   history, or custom local dates. Zoom to five-minute windows, step backward
@@ -46,7 +46,7 @@ flowchart LR
   self-contained HTML with no CDN, external fonts, or analytics.
 - **Automatic startup:** optional systemd user service.
 - **Optional Xiaomi climate panel:** live LYWSD03MMC temperature, humidity,
-  battery voltage, voltage-based charge estimate, and independent freshness.
+  battery voltage, independent freshness, and saved temperature/humidity history.
   Uses the host's existing BlueZ `gatttool` and `stdbuf` commands; no Python packages.
 - **JSON endpoints:** `/api/status`, `/api/history/range`, and the compatible
   legacy `/api/history` endpoint.
@@ -132,20 +132,25 @@ Configuration uses environment variables, inherited by the reader subprocess.
 | `BLUETOOTH_SENSOR_ADDRESS` | empty (disabled) | Optional LYWSD03MMC Bluetooth address |
 | `BLUETOOTH_SENSOR_NAME` | `Cabana climate` | Climate panel title |
 
-Collection occurs every **60 seconds**. Browsers fetch cached status every five
-seconds and graph data every minute. Readings older than **180 seconds** are
+Solar collection occurs every **60 seconds**. Browsers fetch cached status every five
+seconds and graph data every minute. Solar readings older than **180 seconds** are
 marked stale. These browser requests do not trigger additional serial reads.
 
 For an optional Xiaomi LYWSD03MMC sensor, set `BLUETOOTH_SENSOR_ADDRESS` in the
 service environment and restart the dashboard. Bluetooth must be powered on
 and unblocked, with `gatttool` and `stdbuf` already available on the host.
-A separate thread connects briefly once a minute, discovers the measurement
+A separate thread connects briefly every **10 minutes**, discovers the measurement
 and notification handles by UUID, and disconnects after the first valid reading.
 Sensor timeouts cannot block the solar collector. The last successful reading
-remains visible with a warning on failure; after three minutes it is stale.
-Sensor readings are live only and are not added to the solar history database.
-Charge percentage is a rough estimate from 2.1–3.1 V, clamped to 0–100%, using
-the [MiTemperature2 payload format](https://github.com/JsBergbau/MiTemperature2).
+remains visible with a warning on failure; after **30 minutes** it is stale.
+Each successful sensor reading is saved in `sensor_samples` inside the same
+SQLite database as solar history, with its own timestamp, sensor address,
+temperature, humidity, and battery voltage. Temperature and humidity are
+selectable history charts. Earlier sensor readings cannot be reconstructed.
+The last saved reading is restored after restart; a recent reading postpones
+the next connection until its ten-minute interval has elapsed. Battery voltage
+is shown directly; no charge percentage is inferred. Payload format reference:
+[MiTemperature2](https://github.com/JsBergbau/MiTemperature2).
 
 The dashboard has no login or TLS and is intended for a trusted LAN or private
 VPN. For remote use, access that network through a VPN or add an authenticated
@@ -159,8 +164,8 @@ space and functioning storage are required; keep a backup on another device
 for data you want to retain for years. See [backup and maintenance](docs/deployment.md#backups).
 
 The history controls show any saved date range and any measured metric, or all
-18 charts together. Dates and labels use the browser's local time. Each query
-returns at most 1,000 representative readings, using the last sample in each
+available charts together. Dates and labels use the browser's local time. Each query
+returns at most 1,000 representative readings per source, using the last sample in each
 display bucket. This limits browser work on the Pi 2; it does not delete or
 downsample stored records. Displayed extrema describe those representative
 readings, not every underlying sample. Narrow the dates to inspect detail.

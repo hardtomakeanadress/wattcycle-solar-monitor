@@ -96,7 +96,7 @@ async function main() {
     assert((await page.locator('#history-message').textContent()).includes('valid start'));
     await page.selectOption('#range','900'); await settled();
     await page.selectOption('#metric','all');
-    assert.equal(await page.locator('.metric-chart').count(),18);
+    assert.equal(await page.locator('.metric-chart').count(),await page.evaluate(()=>historyData.metrics.length));
     await page.selectOption('#range','all'); await settled();
     assert((await data()).rows<=1000);
     await page.selectOption('#range','900'); await settled();
@@ -138,7 +138,7 @@ async function main() {
     await page.getByRole('button',{name:'Refresh history',exact:true}).click(); await settled();
     assert(await page.locator('#zoom-in').isEnabled());
     assert.deepEqual(errors,[]);
-    console.log('PASS: live API, presets, zoom/pan/latest, minute limit, hover/tap, 18 metrics, custom dates, draft refresh, error recovery, desktop and mobile overflow; no page errors.');
+    console.log('PASS: live API, presets, zoom/pan/latest, minute limit, hover/tap, all metrics, custom dates, draft refresh, error recovery, desktop and mobile overflow; no page errors.');
     console.log('Screenshots: '+output);
   } finally {
     await browser.close();

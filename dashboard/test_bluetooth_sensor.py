@@ -11,9 +11,9 @@ class BluetoothSensorTest(unittest.TestCase):
     def test_decode(self):
         self.assertEqual(ble.decode(bytes.fromhex('cc 06 2d 40 0c')),
                          dict(temperature_C=17.4, humidity_percent=45,
-                              battery_V=3.136, battery_percent_estimate=100))
+                              battery_V=3.136))
         self.assertEqual(ble.decode(bytes.fromhex('0c fe 00 34 08'))['temperature_C'], -5)
-        self.assertEqual(ble.decode(bytes.fromhex('00 00 64 d0 07'))['battery_percent_estimate'], 0)
+        self.assertEqual(ble.decode(bytes.fromhex('00 00 64 d0 07'))['battery_V'], 2.0)
         for packet in ('00 00', '00 00 65 40 0c', '00 00 2d 00 00'):
             with self.assertRaises(ValueError):
                 ble.decode(bytes.fromhex(packet))
@@ -63,7 +63,7 @@ class BluetoothSensorTest(unittest.TestCase):
         self.assertEqual(sensor.snapshot()['reading'], reading)
         self.assertIsNotNone(sensor.snapshot()['error'])
         self.assertIsNone(sensor.handles)
-        with patch.object(ble.time, 'time', return_value=281):
+        with patch.object(ble.time, 'time', return_value=1901):
             self.assertTrue(sensor.snapshot()['stale'])
         with patch.object(sensor, 'read', return_value=reading):
             sensor.poll_once()

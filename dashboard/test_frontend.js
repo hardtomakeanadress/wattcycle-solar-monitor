@@ -68,21 +68,20 @@ async function runFrontendTests() {
 
   // Sensor freshness is independent of solar data and the browser's wall clock.
   fixture.sensor = {enabled:true, name:'Cabana climate', reading:null, error:null,
-    age_seconds:null, stale:true, stale_after_seconds:180};
+    age_seconds:null, stale:true, stale_after_seconds:1800, poll_interval_seconds:600};
   await refresh();
   assert($('sensor-temperature').textContent === '—', 'Missing sensor shown as zero');
   assert($('climate-status').textContent === 'Connecting', 'Initial sensor state incorrect');
   assert($('connection').textContent === '● Live', 'Sensor affects solar status');
-  fixture.sensor.reading = {temperature_C:0,humidity_percent:0,battery_V:3.136,battery_percent_estimate:100};
+  fixture.sensor.reading = {temperature_C:0,humidity_percent:0,battery_V:3.136};
   fixture.sensor.age_seconds = 5; fixture.sensor.stale = false;
   await refresh();
   assert($('sensor-temperature').textContent === '0.0', 'Zero temperature omitted');
   assert($('sensor-humidity').textContent === 0, 'Zero humidity omitted');
-  assert($('sensor-battery-estimate').textContent.includes('≈'), 'Estimate presented as exact');
   assert($('climate-status').textContent === 'Live', 'Fresh sensor not live');
-  monotonicNow += 176000; freshness();
+  monotonicNow += 1796000; freshness();
   assert($('climate-status').textContent === 'Last known', 'Sensor age does not advance');
-  fixture.sensor.error = 'Sensor unavailable. Retrying every minute.';
+  fixture.sensor.error = 'Sensor unavailable. Retrying every 10 minutes.';
   await refresh();
   assert($('climate-message').textContent.includes('unavailable'), 'Sensor failure hidden');
   assert($('sensor-temperature').textContent === '0.0', 'Failure erased last reading');
@@ -120,6 +119,18 @@ async function runFrontendTests() {
   const svg = chart(metric, {...historyFixture, rows:[{ts:historyFixture.start+10,controller_C:-4},{ts:historyFixture.end-10,controller_C:0}]});
   assert(svg.includes('-4') && !svg.includes('NaN'), 'Negative/zero metric invalid');
   assert((svg.match(/M[0-9]/g)||[]).length === 2, 'Outage joined by a line');
+  const climateMetric = {key:'sensor_temperature_C',label:'Climate temperature',unit:'°C',source:'sensor',poll_interval_seconds:600};
+  const climateData = {...historyFixture,start:0,end:3000,bucket_seconds:60,sensor_bucket_seconds:600,
+    rows:[{ts:120,charge_W:20}],sensor_rows:[{ts:100,sensor_temperature_C:-5},{ts:700,sensor_temperature_C:0},{ts:2900,sensor_temperature_C:4}]};
+  const climateSVG = chart(climateMetric, climateData);
+  assert((climateSVG.match(/M[0-9]/g)||[]).length === 2, 'Climate connects across a missed interval or breaks normal ten-minute readings');
+  assert(climateSVG.includes('L') && climateSVG.includes('-5'), 'Climate series does not use sensor timestamps and values');
+  assert(nearestReading(metricRows(climateMetric,climateData),climateMetric.key,710).ts === 700, 'Climate inspection uses solar rows');
+  const savedHistory = historyData;
+  historyData = {...climateData,metrics:[climateMetric]};
+  $('metric').value = climateMetric.key; renderHistory();
+  assert($('charts').innerHTML.includes('Climate temperature') && $('charts').innerHTML.includes('<circle'), 'Climate chart missing');
+  historyData = savedHistory;
   assert(escapeHTML('<img onerror="x">').includes('&lt;'), 'Unsafe markup was not escaped');
   $('range').value = 'custom';
   $('start').value = '2026-09-15T00:00'; $('end').value = '2026-09-14T00:00';

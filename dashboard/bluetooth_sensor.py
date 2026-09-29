@@ -15,8 +15,8 @@ import time
 
 MEASUREMENT_UUID = 'ebe0ccc1-7a0a-4b0c-8a1a-6ff2997da3a6'
 CCCD_UUID = '00002902-0000-1000-8000-00805f9b34fb'
-INTERVAL = 60
-STALE_AFTER = 180
+INTERVAL = 600
+STALE_AFTER = INTERVAL * 3
 CHARACTERISTIC = re.compile(
     r'handle = 0x([\da-f]+), char properties = 0x([\da-f]+), '
     r'char value handle = 0x([\da-f]+), uuid = ([\da-f-]+)', re.I)
@@ -28,7 +28,6 @@ def decode(payload):
     """Stock Xiaomi payload: signed centidegrees, RH %, battery millivolts.
 
     Format: github.com/JsBergbau/MiTemperature2 (handleNotification).
-    Percentage is only a clamped, voltage-based estimate, not a fuel gauge.
     """
     if len(payload) != 5:
         raise ValueError('Expected a five-byte Xiaomi measurement')
@@ -36,8 +35,7 @@ def decode(payload):
     if not (-5000 <= temperature <= 10000 and 0 <= humidity <= 100 and 1000 <= millivolts <= 4000):
         raise ValueError('Invalid Xiaomi measurement')
     return dict(temperature_C=temperature / 100, humidity_percent=humidity,
-                battery_V=millivolts / 1000,
-                battery_percent_estimate=max(0, min(100, round((millivolts - 2100) / 10))))
+                battery_V=millivolts / 1000)
 
 
 def measurement_range(output):
@@ -59,12 +57,18 @@ def notification_descriptor(output, value, end):
 
 
 class XiaomiSensor:
-    def __init__(self, address='', name='Cabana climate'):
+    def __init__(self, address='', name='Cabana climate', on_reading=None):
         self.address = address.strip().upper()
         self.name = name
         self.lock = threading.Lock()
         self.state = dict(reading=None, error=None, last_attempt=None)
         self.handles = None
+        self.on_reading = on_reading
+
+    def restore(self, reading):
+        with self.lock:
+            self.state.update(reading=reading, error=None,
+                              last_attempt=reading['timestamp_seconds'] if reading else None)
 
     def snapshot(self):
         with self.lock:
@@ -137,12 +141,25 @@ class XiaomiSensor:
             # Rediscover after a failure, including firmware/handle changes.
             self.handles = None
             with self.lock:
-                self.state.update(error='Sensor unavailable. Retrying every minute.', last_attempt=attempt)
+                self.state.update(error='Sensor unavailable. Retrying every 10 minutes.', last_attempt=attempt)
             return
+        error = None
+        if self.on_reading is not None:
+            try:
+                self.on_reading(self.address, reading)
+            except Exception:
+                logging.exception('Saving Bluetooth sensor reading failed')
+                error = 'Live sensor reading received, but could not save history. Check storage on the Pi.'
         with self.lock:
-            self.state.update(reading=reading, error=None, last_attempt=attempt)
+            self.state.update(reading=reading, error=error, last_attempt=attempt)
 
     def poll_loop(self):
+        # A restart must not trigger another radio connection for a recent sample.
+        reading = self.snapshot()['reading']
+        if reading:
+            remaining = min(INTERVAL, max(0, INTERVAL - (time.time() - reading['timestamp_seconds'])))
+            if remaining:
+                time.sleep(remaining)
         while True:
             start = time.monotonic()
             self.poll_once()

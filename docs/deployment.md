@@ -70,6 +70,8 @@ suite, and start the service again. Back up the database before updates.
 The default database is `dashboard/history.sqlite3` inside the checkout.
 If `SOLAR_DATABASE` is set, use that path instead. Reading frequency is once per
 minute: about 525,600 samples per non-leap year if collection runs continuously.
+The optional climate sensor adds 52,560 samples per year at ten-minute intervals
+in a second table in this same file; a normal SQLite backup includes both tables.
 Disk usage depends on the stored JSON and SQLite overhead; monitor free space.
 
 The retention target is **at least five years**. The application never purges

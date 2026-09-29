@@ -14,10 +14,10 @@
 <main>
 <header><div><div class="brand">WattCycle <span>☀</span> Solar</div><h1>A little closer to the sun.</h1><div class="sub">Your solar controller, at a glance.</div></div><div class="pill" id="connection" role="status">Connecting…</div></header>
 <section id="climate" class="climate hidden" aria-labelledby="climate-name">
-<div class="climate-intro"><div><div class="climate-title"><svg class="climate-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M9 14.7V5a3 3 0 0 1 6 0v9.7a5 5 0 1 1-6 0Z"/><path d="M12 8v9"/><circle cx="12" cy="18" r="1.5" fill="currentColor" stroke="none"/></svg><h2 id="climate-name">Cabana climate</h2></div><small>Xiaomi temperature &amp; humidity</small></div><div class="climate-bottom"><span id="climate-status" class="climate-status" role="status">Connecting</span><small id="climate-updated">First reading pending</small></div></div>
+<div class="climate-intro"><div><div class="climate-title"><svg class="climate-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M9 14.7V5a3 3 0 0 1 6 0v9.7a5 5 0 1 1-6 0Z"/><path d="M12 8v9"/><circle cx="12" cy="18" r="1.5" fill="currentColor" stroke="none"/></svg><h2 id="climate-name">Cabana climate</h2></div><small>Xiaomi sensor · every 10 minutes</small></div><div class="climate-bottom"><span id="climate-status" class="climate-status" role="status">Connecting</span><small id="climate-updated">First reading pending</small></div></div>
 <div class="climate-metric"><div class="label">TEMPERATURE</div><div class="climate-value"><span id="sensor-temperature">—</span><span class="unit">°C</span></div></div>
 <div class="climate-metric climate-humidity"><div class="label">HUMIDITY</div><div class="climate-value"><span id="sensor-humidity">—</span><span class="unit">%</span></div></div>
-<div class="climate-metric climate-battery"><div class="label">SENSOR BATTERY</div><div class="climate-value"><span id="sensor-battery">—</span><span class="unit">V</span></div><small id="sensor-battery-estimate">Charge estimate pending</small></div>
+<div class="climate-metric climate-battery"><div class="label">SENSOR BATTERY</div><div class="climate-value"><span id="sensor-battery">—</span><span class="unit">V</span></div><small>Measured voltage</small></div>
 <p id="climate-message" class="climate-message" role="status"></p>
 </section>
 <div class="warning hidden" id="warning" role="alert"></div>
@@ -28,7 +28,7 @@
 <div class="card"><div class="label">GENERATED TODAY</div><div class="value"><span id="today_generation_Wh">—</span><span class="unit">Wh</span></div><small>Peak <span id="today_peak_W">—</span> W today</small></div>
 </section>
 <section class="panel history-panel" aria-label="Measurement history">
-<div class="charthead"><h2>Explore your history</h2><small>One-minute collection · history kept indefinitely</small></div>
+<div class="charthead"><h2>Explore your history</h2><small>Solar: 1 min · Climate: 10 min</small></div>
 <div class="history-controls">
 <label>Time range<select id="range" onchange="rangeChanged()"><option value="900">Last 15 minutes</option><option value="3600">Last hour</option><option value="21600">Last 6 hours</option><option value="86400" selected>Last 24 hours</option><option value="604800">Last 7 days</option><option value="2592000">Last 30 days</option><option value="31557600">Last year</option><option value="all">All saved history</option><option value="custom">Custom dates</option><option id="follow-option" value="follow" hidden>Latest at current zoom</option></select></label>
 <label>Measurements<select id="metric" onchange="renderHistory()"><option value="overview">Overview: charging, battery &amp; solar</option><option value="all">Every metric</option></select></label>
@@ -46,7 +46,7 @@
 <div id="history-message" class="history-message" role="status">Loading history…</div>
 <p id="history-coverage" class="history-note"></p>
 <div id="charts" class="charts"></div>
-<p class="history-note">Move across or tap a chart to inspect the nearest reading. Zoom in for minute detail; Earlier and Later move by one window. Latest follows incoming readings at the current zoom. Times use your browser’s local timezone. Collection is once per minute; zoom cannot reveal measurements between readings.</p>
+<p class="history-note">Move across or tap a chart to inspect the nearest reading. Zoom in for minute detail; Earlier and Later move by one window. Latest follows incoming readings at the current zoom. Times use your browser’s local timezone. Solar readings are collected every minute and climate readings every 10 minutes; zoom cannot reveal measurements between readings.</p>
 <p class="history-note">Solar input is panel voltage; charging power is the controller’s output to the battery. Daily energy counters reset each day. Long ranges show representative readings, so brief peaks and state changes may be omitted. Full minute readings stay in storage.</p>
 </section>
 <div class="panels"><section class="panel"><h2>Controller status</h2><div class="row"><span>Charge stage</span><strong id="stage">—</strong></div><div class="row"><span>Controller temperature</span><strong id="temp">—</strong></div><div class="row"><span>Battery temperature field</span><strong id="batterytemp">—</strong></div><div class="row"><span>DC load</span><strong id="load">—</strong></div><div class="row"><span>Faults</span><strong id="faults">—</strong></div></section></div>
@@ -103,11 +103,10 @@ function sensorFreshness() {
   put('sensor-temperature', reading ? reading.temperature_C.toFixed(1) : '—');
   put('sensor-humidity', reading ? reading.humidity_percent : '—');
   put('sensor-battery', reading ? reading.battery_V.toFixed(3) : '—');
-  put('sensor-battery-estimate', reading ? `≈ ${reading.battery_percent_estimate}% charge` : 'Charge estimate pending');
   const ago = age < 60 ? 'just now' : age < 3600 ? `${Math.floor(age/60)} min ago` : age < 86400 ? `${Math.floor(age/3600)} h ago` : `${Math.floor(age/86400)} d ago`;
   put('climate-updated', reading ? `Read ${ago}` : 'First reading pending');
   put('climate-message', !connected ? 'Dashboard connection lost. Showing the last received sensor reading.'
-    : sensor.error || (bad && reading ? 'Waiting for a fresh sensor reading. Retrying every minute.' : ''));
+    : sensor.error || (bad && reading ? 'Waiting for a fresh sensor reading. Retrying every 10 minutes.' : ''));
 }
 
 async function refresh() {
@@ -157,7 +156,7 @@ function timeLabel(seconds, span) {
   return date.toLocaleDateString([], {month:'short',day:'numeric', ...(span > 31557600 ? {year:'numeric'} : {})});
 }
 function chart(metric, data) {
-  const rows = data.rows, key = metric.key;
+  const rows = metricRows(metric, data), key = metric.key;
   const values = rows.filter(r => Number.isFinite(r[key]));
   if (!values.length) return '<p class="empty">No recorded values for this metric in this range.</p>';
   const low = Math.min(...values.map(r => r[key])), high = Math.max(...values.map(r => r[key]));
@@ -178,7 +177,8 @@ function chart(metric, data) {
   for (const r of rows) {
     if (!Number.isFinite(r[key])) { previous = null; continue; }
     const xx = x(r.ts).toFixed(1), yy = y(r[key]).toFixed(1);
-    const connected = previous !== null && r.ts - previous < Math.max(180, data.bucket_seconds * 2);
+    const bucket = metric.source === 'sensor' ? data.sensor_bucket_seconds : data.bucket_seconds;
+    const connected = previous !== null && r.ts - previous < Math.max((metric.poll_interval_seconds || 60) * 3, bucket * 2);
     // States and daily counters are drawn as steps; outages are not joined.
     const step = metric.states || key.startsWith('today_') || key === 'fault_bits';
     path += connected ? (step ? `H${xx} V${yy} ` : `L${xx},${yy} `) : `M${xx},${yy} `;
@@ -192,6 +192,7 @@ function chart(metric, data) {
     : `Displayed min ${metricValue(metric, low)} · max ${metricValue(metric, high)}`;
   return `<svg viewBox="0 0 600 250" data-metric="${escapeHTML(key)}" onpointermove="inspectPoint(event)" onclick="inspectPoint(event)" role="img" aria-label="${escapeHTML(metric.label)} history">${content}</svg><div class="summary">${escapeHTML(summary)}</div><div class="point-detail">Latest displayed: ${escapeHTML(metricValue(metric,values[values.length-1][key]))}</div>`;
 }
+function metricRows(metric, data) { return metric.source === 'sensor' ? (data.sensor_rows || []) : data.rows; }
 function nearestReading(rows, key, timestamp) {
   let nearest = null;
   for (const row of rows) {
@@ -205,7 +206,7 @@ function inspectPoint(event) {
   const position = Math.max(0, Math.min(1, ((event.clientX-rect.left)/rect.width*600-65)/515));
   const metric = historyData.metrics.find(m => m.key === svg.getAttribute('data-metric'));
   if (!metric) return;
-  const point = nearestReading(historyData.rows, metric.key, historyData.start+position*(historyData.end-historyData.start));
+  const point = nearestReading(metricRows(metric, historyData), metric.key, historyData.start+position*(historyData.end-historyData.start));
   if (!point) return;
   svg.closest('.metric-chart').querySelector('.point-detail').textContent = `${new Date(point.ts*1000).toLocaleString()}: ${metricValue(metric,point[metric.key])}`;
   const xx = 65+(point.ts-historyData.start)/(historyData.end-historyData.start)*515;
@@ -320,10 +321,11 @@ async function loadHistory(automatic = false) {
     const selection = $('metric').value || 'overview';
     $('metric').innerHTML = '<option value="overview">Overview: charging, battery &amp; solar</option><option value="all">Every metric</option>' + data.metrics.map(m => `<option value="${escapeHTML(m.key)}">${escapeHTML(m.label)}</option>`).join('');
     $('metric').value = selection;
-    put('history-message', data.sample_count ? '' : 'No readings saved in this date range.');
+    put('history-message', data.sample_count || data.sensor_sample_count ? '' : 'No readings saved in this date range.');
     const coverage = data.available_start == null ? 'No saved history yet.' : `Saved history: ${new Date(data.available_start*1000).toLocaleString()} – ${new Date(data.available_end*1000).toLocaleString()}.`;
     const storage = data.storage ? ` Database ${(data.storage.database_bytes/1e6).toFixed(1)} MB · ${(data.storage.free_bytes/1e9).toFixed(1)} GB free.` : '';
-    put('history-coverage', `${coverage} ${number(data.sample_count)} readings in selected range; ${data.rows.length} displayed (last reading per ${number(data.bucket_seconds/60)} min).${storage}`);
+    const climate = data.metrics.some(m => m.source === 'sensor') ? ` Climate: ${number(data.sensor_sample_count || 0)} readings; ${(data.sensor_rows || []).length} displayed (last per ${number(data.sensor_bucket_seconds/60)} min).` : '';
+    put('history-coverage', `${coverage} Solar: ${number(data.sample_count)} readings; ${data.rows.length} displayed (last per ${number(data.bucket_seconds/60)} min).${climate}${storage}`);
     renderHistory();
   } catch (error) {
     if (request !== historyRequest) return;

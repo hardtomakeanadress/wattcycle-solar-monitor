@@ -13,7 +13,7 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlsplit
-from bluetooth_sensor import XiaomiSensor
+from bluetooth_sensor import XiaomiSensor, INTERVAL as SENSOR_INTERVAL
 
 ROOT = Path(__file__).resolve().parent
 READER = ROOT.parent / 'read_controller.py'
@@ -48,6 +48,8 @@ METRICS = [
     ('running_days', 'Operating days', 'days'),
 ]
 CHARGE_STATES = ['idle', 'open', 'MPPT', 'equalizing', 'boost', 'float', 'limited']
+SENSOR_METRICS = [('sensor_temperature_C', 'Climate temperature', '°C'),
+                  ('sensor_humidity_percent', 'Climate humidity', '%')]
 
 
 class InvalidRange(ValueError):
@@ -75,6 +77,12 @@ def history_range(query):
     with database() as db:
         first = db.execute('SELECT ts FROM samples ORDER BY ts LIMIT 1').fetchone()
         last = db.execute('SELECT ts FROM samples ORDER BY ts DESC LIMIT 1').fetchone()
+        sensor_first = db.execute('SELECT ts FROM sensor_samples WHERE sensor_address=? ORDER BY ts LIMIT 1',
+                                  (SENSOR.address,)).fetchone()
+        sensor_last = db.execute('SELECT ts FROM sensor_samples WHERE sensor_address=? ORDER BY ts DESC LIMIT 1',
+                                 (SENSOR.address,)).fetchone()
+        first = min((r for r in (first, sensor_first) if r), default=None)
+        last = max((r for r in (last, sensor_last) if r), default=None)
         if start is None:
             start = first[0] if first else end - 86400
             end = max(end, last[0] + 0.001 if last else end, start + 1)
@@ -87,6 +95,15 @@ def history_range(query):
             ) picked ON s.ts = picked.ts ORDER BY s.ts
         ''', (start, end, start, bucket)).fetchall()
         count = db.execute('SELECT COUNT(*) FROM samples WHERE ts >= ? AND ts < ?', (start, end)).fetchone()[0]
+        sensor_bucket = max(SENSOR_INTERVAL, bucket)
+        sensor_selected = db.execute('''
+            SELECT ts, data FROM sensor_samples WHERE sensor_address=? AND ts IN (
+                SELECT MAX(ts) FROM sensor_samples WHERE sensor_address=? AND ts >= ? AND ts < ?
+                GROUP BY CAST((ts - ?) / ? AS INTEGER)
+            ) ORDER BY ts
+        ''', (SENSOR.address, SENSOR.address, start, end, start, sensor_bucket)).fetchall()
+        sensor_count = db.execute('SELECT COUNT(*) FROM sensor_samples WHERE sensor_address=? AND ts >= ? AND ts < ?',
+                                  (SENSOR.address, start, end)).fetchone()[0]
     rows = []
     for ts, raw in selected:
         reading = json.loads(raw)
@@ -99,8 +116,18 @@ def history_range(query):
                 value = int(value) if isinstance(value, bool) else None
             row[key] = value if isinstance(value, (int, float)) and math.isfinite(value) else None
         rows.append(row)
+    sensor_rows = []
+    for ts, raw in sensor_selected:
+        reading = json.loads(raw)
+        row = {'ts': ts}
+        for key, _, _ in SENSOR_METRICS:
+            value = reading.get(key.removeprefix('sensor_'))
+            row[key] = value if isinstance(value, (int, float)) and math.isfinite(value) else None
+        sensor_rows.append(row)
     disk = os.statvfs(DB.parent)
     return dict(start=start, end=end, bucket_seconds=bucket, sample_count=count,
+                sensor_rows=sensor_rows, sensor_sample_count=sensor_count,
+                sensor_bucket_seconds=sensor_bucket,
                 storage=dict(database_bytes=DB.stat().st_size,
                              free_bytes=disk.f_bavail * disk.f_frsize),
                 available_start=first[0] if first else None,
@@ -109,7 +136,10 @@ def history_range(query):
                 metrics=[dict(key=k, label=label, unit=unit,
                               states=CHARGE_STATES if k == 'charge_status' else
                               ['Off', 'On'] if k == 'load_on' else None)
-                         for k, label, unit in METRICS], rows=rows)
+                         for k, label, unit in METRICS] +
+                        ([dict(key=k, label=label, unit=unit, states=None, source='sensor',
+                               poll_interval_seconds=SENSOR_INTERVAL)
+                          for k, label, unit in SENSOR_METRICS] if SENSOR.address else []), rows=rows)
 
 
 @contextmanager
@@ -127,9 +157,23 @@ def initialize():
     DB.parent.mkdir(parents=True, exist_ok=True)
     with database() as db:
         db.execute('CREATE TABLE IF NOT EXISTS samples (ts REAL PRIMARY KEY, data TEXT NOT NULL)')
+        db.execute('''CREATE TABLE IF NOT EXISTS sensor_samples (
+            sensor_address TEXT NOT NULL, ts REAL NOT NULL, data TEXT NOT NULL,
+            PRIMARY KEY (sensor_address, ts))''')
         row = db.execute('SELECT data FROM samples ORDER BY ts DESC LIMIT 1').fetchone()
         if row:
             STATE['reading'] = json.loads(row[0])
+        sensor_row = db.execute('SELECT data FROM sensor_samples WHERE sensor_address=? ORDER BY ts DESC LIMIT 1',
+                                (SENSOR.address,)).fetchone()
+    SENSOR.on_reading = save_sensor_reading
+    SENSOR.restore(json.loads(sensor_row[0]) if sensor_row else None)
+
+
+def save_sensor_reading(address, reading):
+    with database() as db:
+        # Store each actual Bluetooth measurement once, at its own timestamp.
+        db.execute('INSERT INTO sensor_samples VALUES (?, ?, ?)',
+                   (address, reading['timestamp_seconds'], json.dumps(reading)))
 
 
 def poll_once():
