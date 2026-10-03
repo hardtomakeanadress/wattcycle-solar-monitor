@@ -1,0 +1,84 @@
+"""Install the checked files with a rollback if the live API does not recover."""
+from pathlib import Path
+import hashlib
+import json
+import os
+import py_compile
+import shutil
+import sqlite3
+import subprocess
+import time
+import urllib.request
+
+root = Path('/home/PI_USER/WattCycle-RS485')
+stage = root / 'bluetooth-20260928'
+dashboard = root / 'dashboard'
+expected = {'server.py':'ee65c1281ea8957504f004ae3cf2b35583d55a9e718e0c1a0018ad269b6e188e',
+            'index.html':'c5bbd17ec074598a38f052d920f8f78e3c9465cc27a9811f05f090ff7efe309e'}
+for name, digest in expected.items():
+    assert hashlib.sha256((dashboard/name).read_bytes()).hexdigest() == digest, f'{name} changed since inspection'
+for name in ('server.py', 'bluetooth_sensor.py'):
+    py_compile.compile(str(stage/'candidate'/name), doraise=True)
+backup = stage / 'backup'
+backup.mkdir(exist_ok=False)
+dropin = Path.home()/'.config/systemd/user/cabana-solar.service.d/bluetooth-sensor.conf'
+targets = [dashboard/name for name in ('server.py','index.html','bluetooth_sensor.py')] + [dropin]
+manifest = []
+for path in targets:
+    present = path.exists()
+    manifest.append(dict(path=str(path), existed=present))
+    if present:
+        shutil.copy2(path, backup/path.name)
+(backup/'manifest.json').write_text(json.dumps(manifest, indent=2))
+def database_summary():
+    db = sqlite3.connect(f'file:{dashboard / "history.sqlite3"}?mode=ro', uri=True)
+    try:
+        return db.execute('SELECT COUNT(*), MIN(ts), MAX(ts) FROM samples').fetchone()
+    finally:
+        db.close()
+before = database_summary()
+(backup/'database-before.json').write_text(json.dumps(before))
+def restart():
+    subprocess.run(['systemctl','--user','daemon-reload'], check=True, timeout=15)
+    subprocess.run(['systemctl','--user','restart','cabana-solar'], check=True, timeout=20)
+def install(source, target):
+    temp = target.with_name(target.name+'.bluetooth-new')
+    shutil.copy2(source, temp)
+    os.replace(temp, target)
+try:
+    for name in ('bluetooth_sensor.py', 'server.py', 'index.html'):
+        install(stage/'candidate'/name, dashboard/name)
+    dropin.parent.mkdir(parents=True, exist_ok=True)
+    configuration = stage/'candidate'/'bluetooth-sensor.conf'
+    configuration.write_text('[Service]\nEnvironment=BLUETOOTH_SENSOR_ADDRESS=REPLACE_WITH_SENSOR_ADDRESS\nEnvironment="BLUETOOTH_SENSOR_NAME=Cabana climate"\n')
+    install(configuration, dropin)
+    restart()
+    deadline = time.monotonic()+45
+    state = None
+    while time.monotonic()<deadline:
+        try:
+            with urllib.request.urlopen('http://127.0.0.1:8080/api/status', timeout=3) as response:
+                state = json.load(response)
+            if state.get('sensor',{}).get('reading') and not state['sensor']['error'] and not state['error'] and not state['stale']:
+                break
+        except OSError:
+            pass
+        time.sleep(1)
+    else:
+        raise RuntimeError(f'Dashboard did not become healthy: {state}')
+    after = database_summary()
+    assert after[0] >= before[0] and after[1] == before[1], 'Solar history changed unexpectedly'
+    report = dict(status=state, database_before=before, database_after=after,
+                  hashes={name:hashlib.sha256((dashboard/name).read_bytes()).hexdigest()
+                          for name in ('server.py','index.html','bluetooth_sensor.py')})
+    (stage/'deployed.json').write_text(json.dumps(report, indent=2))
+    print(json.dumps(report))
+except Exception:
+    for item in manifest:
+        target = Path(item['path'])
+        if item['existed']:
+            install(backup/target.name, target)
+        elif target.exists():
+            os.replace(target, stage/(target.name+'.failed'))
+    restart()
+    raise

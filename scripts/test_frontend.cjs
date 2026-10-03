@@ -6,6 +6,7 @@ const root = path.join(__dirname, '..', 'dashboard');
 const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 const script = html.match(/<script>([\s\S]*?)<\/script>/)[1]
   .replace('refresh().then(history);', '')
+  .replace('refreshSystem();', '')
   .replace('setInterval(freshness, 1000);', '');
 const context = vm.createContext({});
 vm.runInContext(fs.readFileSync(path.join(root, 'test_frontend.js'), 'utf8'), context);

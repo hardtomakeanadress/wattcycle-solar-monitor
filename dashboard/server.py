@@ -14,10 +14,12 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlsplit
 from bluetooth_sensor import XiaomiSensor, INTERVAL as SENSOR_INTERVAL
+from system_info import SystemInfo
 
 ROOT = Path(__file__).resolve().parent
 READER = ROOT.parent / 'read_controller.py'
 DB = Path(os.environ.get('SOLAR_DATABASE', str(ROOT / 'history.sqlite3'))).expanduser()
+SYSTEM = SystemInfo(DB.parent)
 INTERVAL = 60
 STALE_AFTER = INTERVAL * 3
 LOCK = threading.Lock()
@@ -239,6 +241,8 @@ class Handler(BaseHTTPRequestHandler):
             body, kind = (ROOT / 'index.html').read_bytes(), 'text/html; charset=utf-8'
         elif route == '/api/status':
             body, kind = json.dumps(snapshot()).encode(), 'application/json'
+        elif route == '/api/system':
+            body, kind = json.dumps(SYSTEM.snapshot()).encode(), 'application/json'
         elif route == '/api/history/range':
             body, kind = json.dumps(history_range(url.query)).encode(), 'application/json'
         elif route == '/api/history':

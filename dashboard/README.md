@@ -41,6 +41,7 @@ Startup adds the sensor table if missing without changing the solar table.
 | --- | --- |
 | `GET /` | Self-contained dashboard; no external scripts or fonts |
 | `GET /api/status` | Latest reading, error, freshness, and collection interval |
+| `GET /api/system` | Allowlisted host specifications and health, cached for 30 seconds |
 | `GET /api/history` | Legacy: last 24 hours, charge watts and battery volts, five-minute buckets |
 | `GET /api/history/range?start=…&end=…` | Selected Unix time range, metric definitions, all measured scalar fields, storage/coverage metadata |
 | `GET /api/history/range?range=all` | All saved dates using bounded display sampling |

@@ -43,6 +43,11 @@ async function main() {
     }
     assert.equal(await page.locator('#range').inputValue(),'86400');
     assert.equal(await page.locator('.metric-chart svg').count(),3);
+    await page.waitForFunction(()=>!!systemData && systemConnected);
+    assert((await page.locator('#system-model').textContent()).includes('Raspberry Pi'));
+    assert.equal(await page.locator('.system-details, #system-flags').count(),0);
+    assert(!(await page.locator('#system-temperature').textContent()).includes('NaN'));
+    await page.locator('.system-panel').screenshot({path:path.join(output,'system-desktop.png')});
     assert(await page.locator('#later').isDisabled());
     await page.screenshot({path:path.join(output,'after-desktop.png'),fullPage:true});
     const settled = async()=>page.waitForFunction(()=>!historyLoading && !!historyData && document.getElementById('history-message').textContent!=='Loading history…');
@@ -127,7 +132,9 @@ async function main() {
     assert(await mobile.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
     await mobile.screenshot({path:path.join(output,'after-mobile-390.png'),fullPage:true});
     await mobile.setViewportSize({width:320,height:740});
+    await mobile.waitForFunction(()=>!!systemData && systemConnected);
     assert(await mobile.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+    await mobile.locator('.system-panel').screenshot({path:path.join(output,'system-mobile-320.png')});
     await mobile.screenshot({path:path.join(output,'after-mobile-320.png'),fullPage:true});
     // Failed history requests disable navigation, then recover on the next refresh.
     await page.route('**/api/history/range?*',route=>route.fulfill({status:503,body:'Test outage'}));

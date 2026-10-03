@@ -10,6 +10,8 @@
 .climate{display:grid;grid-template-columns:1.4fr 1fr 1fr 1fr;align-items:center;gap:22px;margin:0 0 18px;padding:24px;background:linear-gradient(115deg,#20302a,#19231d 70%);border:1px solid #3a4f41;border-radius:18px}.climate.hidden{display:none}.climate-title{display:flex;align-items:center;gap:10px;margin-bottom:9px}.climate-title h2{margin:0;font-size:17px}.climate-icon{width:28px;height:28px;color:#c1dfcf;flex:none}.climate small{font-size:12px;line-height:1.6}.climate-metric{border-left:1px solid #3a4f41;padding-left:24px;min-width:0}.climate-metric .label{font-size:12px}.climate-value{font-size:36px;letter-spacing:-1px;font-weight:550;margin:8px 0 0;font-variant-numeric:tabular-nums}.climate-value .unit{font-size:18px;color:#c1dfcf}.climate-battery .climate-value{font-size:26px;margin-bottom:4px}.climate-bottom{display:flex;align-items:center;gap:10px;margin-top:10px}.climate-status{font-size:11px;color:#c1dfcf;white-space:nowrap}.climate-status::before{content:'';display:inline-block;width:6px;height:6px;background:currentColor;border-radius:50%;margin-right:6px}.climate.stale .climate-status{color:#ffdda0}.climate.stale .climate-value{color:#b3bbb4}.climate-message{grid-column:1/-1;font-size:12px;color:#ffdda0;margin:0;line-height:1.6}.climate-message:empty{display:none}
 @media(max-width:750px){header{margin-bottom:26px}.climate{grid-template-columns:1fr 1fr;gap:20px 14px;padding:20px}.climate-intro{grid-column:1/-1;display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px}.climate-title{margin-bottom:3px}.climate-bottom{margin:0}.climate-metric{padding-left:0;border:0}.climate-humidity{padding-left:20px;border-left:1px solid #3a4f41}.climate-battery{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;gap:8px;border-top:1px solid #3a4f41;padding-top:14px}.climate-battery .climate-value{font-size:17px;margin:0;letter-spacing:0}.climate-battery .unit{font-size:14px}.climate-battery small{font-size:11px}.climate-value{font-size:34px}.climate-message{margin-top:-8px}}
 @media(max-width:360px){.climate-battery{flex-wrap:wrap}.climate-battery .label{flex-basis:100%}}
+.system-panel{margin-top:14px}.system-heading{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap}.system-heading h2{margin-bottom:8px}.system-model{color:#a9b9ac;font-size:14px;margin:0 0 22px}.system-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:20px}.system-stat{min-width:0}.system-value{font-size:26px;letter-spacing:-.6px;margin:10px 0 5px;color:#d6ee9b;font-variant-numeric:tabular-nums}.system-stat small{font-size:12px}.system-note{font-size:12px;color:#a9b9ac;line-height:1.6;margin:18px 0 0}.system-note.warning-text{color:#ffdda0}.system-stats.stale .system-value{color:#a9b9ac}
+@media(max-width:750px){.system-stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:24px 14px}.system-heading small{font-size:11px}.system-value{font-size:24px}}
 </style>
 <main>
 <header><div><div class="brand">WattCycle <span>☀</span> Solar</div><h1>A little closer to the sun.</h1><div class="sub">Your solar controller, at a glance.</div></div><div class="pill" id="connection" role="status">Connecting…</div></header>
@@ -50,6 +52,17 @@
 <p class="history-note">Solar input is panel voltage; charging power is the controller’s output to the battery. Daily energy counters reset each day. Long ranges show representative readings, so brief peaks and state changes may be omitted. Full minute readings stay in storage.</p>
 </section>
 <div class="panels"><section class="panel"><h2>Controller status</h2><div class="row"><span>Charge stage</span><strong id="stage">—</strong></div><div class="row"><span>Controller temperature</span><strong id="temp">—</strong></div><div class="row"><span>Battery temperature field</span><strong id="batterytemp">—</strong></div><div class="row"><span>DC load</span><strong id="load">—</strong></div><div class="row"><span>Faults</span><strong id="faults">—</strong></div></section></div>
+<section class="panel system-panel" aria-labelledby="system-title">
+<div class="system-heading"><h2 id="system-title">Raspberry Pi</h2><small id="system-updated" role="status">Loading system information…</small></div>
+<p class="system-model" id="system-model">The computer behind your solar monitor.</p>
+<div class="system-stats" id="system-stats">
+<div class="system-stat"><div class="label">CPU TEMPERATURE</div><div class="system-value" id="system-temperature">—</div><small>Measured on the Pi</small></div>
+<div class="system-stat"><div class="label">AVAILABLE MEMORY</div><div class="system-value" id="system-memory">—</div><small id="system-memory-total">Total memory —</small></div>
+<div class="system-stat"><div class="label">FREE STORAGE</div><div class="system-value" id="system-storage">—</div><small id="system-storage-total">History filesystem</small></div>
+<div class="system-stat"><div class="label">UPTIME</div><div class="system-value" id="system-uptime">—</div><small>Since the Pi last started</small></div>
+</div>
+<p class="system-note" id="system-message" role="status">System information refreshes every 30 seconds.</p>
+</section>
 <footer><span id="identity">WattCycle · M-2430N</span><span id="updated">Waiting for first reading</span></footer>
 </main>
 <script>
@@ -57,6 +70,7 @@ const $ = id => document.getElementById(id);
 const put = (id, value) => $(id).textContent = value;
 let status = null, receivedAt = 0, connected = false, historyData = null, historyRequest = 0;
 let followSeconds = null, fixedWindow = null, historyLoading = false, rangeDraft = false;
+let systemData = null, systemReceivedAt = 0, systemConnected = false;
 const MIN_WINDOW = 300;
 
 async function getJSON(url) {
@@ -75,6 +89,7 @@ function elapsed() { return Math.max(0, (performance.now() - receivedAt) / 1000)
 
 function freshness() {
   sensorFreshness();
+  systemFreshness();
   const reading = status?.reading;
   // Use the Pi's reported age; the phone/laptop clock may be wrong.
   const age = status?.age_seconds == null ? Infinity : status.age_seconds + elapsed();
@@ -132,6 +147,39 @@ async function refresh() {
     // Schedule after completion so slow requests never overlap.
     setTimeout(refresh, 5000);
   }
+}
+
+function systemBytes(value) {
+  if (!Number.isFinite(value) || value < 0) return '—';
+  return value >= 1073741824 ? (value/1073741824).toFixed(1) + ' GiB' : Math.round(value/1048576) + ' MiB';
+}
+function systemUptime(seconds) {
+  if (!Number.isFinite(seconds) || seconds < 0) return '—';
+  const days = Math.floor(seconds/86400), hours = Math.floor(seconds/3600)%24;
+  return days ? `${days}d ${hours}h` : hours ? `${hours}h ${Math.floor(seconds/60)%60}m` : `${Math.floor(seconds/60)}m`;
+}
+function systemFreshness() {
+  const age = systemData ? systemData.age_seconds + Math.max(0,(performance.now()-systemReceivedAt)/1000) : Infinity;
+  const stale = !systemConnected || !Number.isFinite(age) || age > 90;
+  $('system-stats').classList.toggle('stale', stale);
+  put('system-updated', !systemData ? 'System information unavailable' : stale ? 'Last known system information' : 'Updated ' + new Date(systemData.timestamp_utc).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}));
+  put('system-message', stale ? 'System information unavailable. Retrying automatically; solar monitoring continues separately.' : 'System information refreshes every 30 seconds. Unavailable values appear as —.');
+  $('system-message').classList.toggle('warning-text', stale);
+}
+async function refreshSystem() {
+  try {
+    const data = await getJSON('/api/system');
+    if (!data || !Number.isFinite(data.age_seconds) || !Number.isFinite(Date.parse(data.timestamp_utc))) throw new Error('Invalid system information');
+    systemData = data; systemReceivedAt = performance.now(); systemConnected = true;
+    put('system-model', data.model || 'Monitor computer');
+    put('system-temperature', Number.isFinite(data.temperature_C) ? data.temperature_C.toFixed(1) + ' °C' : '—');
+    put('system-memory', systemBytes(data.memory_available_bytes));
+    put('system-memory-total', systemBytes(data.memory_total_bytes) + ' total usable memory');
+    put('system-storage', systemBytes(data.storage_free_bytes));
+    put('system-storage-total', systemBytes(data.storage_total_bytes) + ' history filesystem');
+    put('system-uptime', systemUptime(data.uptime_seconds));
+  } catch (error) { systemConnected = false; }
+  finally { systemFreshness(); setTimeout(refreshSystem, 30000); }
 }
 
 function escapeHTML(value) {
@@ -347,5 +395,6 @@ async function history() {
 }
 
 refresh().then(history);
+refreshSystem();
 setInterval(freshness, 1000);
 </script></html>

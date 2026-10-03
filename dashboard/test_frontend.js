@@ -34,11 +34,22 @@ let historyFixture = {start: fixture.server_time_seconds-86400, end: fixture.ser
   metrics: [{key:'charge_W',label:'Charging power',unit:'W'}, {key:'battery_V',label:'Battery voltage',unit:'V'},
     {key:'PV_V',label:'Solar input voltage',unit:'V'}, {key:'controller_C',label:'Temperature',unit:'°C'}]};
 let requestedURL = '';
+let systemFetchFailed = false;
+let systemFixture = {timestamp_utc:'2026-10-03T12:00:00Z',age_seconds:0,
+  model:'Raspberry Pi 2 Model B Rev 1.1',cpu_cores:4,cpu_model:'ARMv7 Processor',
+  os:'Raspbian 13',kernel:'6.12',architecture:'armv7l',python_version:'3.13.5',
+  temperature_C:34.7,memory_total_bytes:1073741824,memory_available_bytes:0,
+  storage_total_bytes:32*1073741824,storage_free_bytes:24*1073741824,
+  uptime_seconds:172861,throttle_current:[],throttle_since_boot:[]};
 
 async function fetch(url) {
   requestedURL = url;
   if (pendingFetch) await pendingFetch;
   if (failedFetch) throw new Error('Offline');
+  if (url === '/api/system') {
+    if (systemFetchFailed) throw new Error('System unavailable');
+    return {ok:true,json:async()=>systemFixture};
+  }
   return {ok: true, json: async () => url === '/api/status' ? fixture : {...historyFixture, rows}};
 }
 function assert(condition, message) { if (!condition) throw new Error(message); }
@@ -65,6 +76,28 @@ async function runFrontendTests() {
   await refresh();
   assert($('warning').textContent.includes('could not save'), 'Storage failure hidden');
   fixture.error = null;
+
+  await refresh();
+  await refreshSystem();
+  assert($('system-model').textContent.includes('Raspberry Pi 2'), 'Pi model omitted');
+  assert($('system-memory').textContent === '0 MiB', 'Zero available RAM discarded');
+  assert($('system-storage').textContent === '24.0 GiB', 'Disk units incorrect');
+  assert($('system-uptime').textContent === '2d 0h', 'Uptime formatting incorrect');
+  assert($('system-temperature').textContent === '34.7 °C', 'Pi temperature incorrect');
+  assert(!$('system-stats').classList.contains('stale'), 'Fresh host data marked stale');
+  systemFetchFailed = true; await refreshSystem();
+  assert($('system-updated').textContent.includes('Last known'), 'System failure not marked');
+  assert($('system-temperature').textContent === '34.7 °C', 'System failure erased last value');
+  assert($('connection').textContent === '● Live', 'System endpoint failure affected solar connection');
+  systemFetchFailed = false; await refreshSystem();
+  monotonicNow += 91000; systemFreshness();
+  assert($('system-stats').classList.contains('stale'), 'System age does not advance');
+  systemFixture.temperature_C = null; systemFixture.throttle_current = null; systemFixture.throttle_since_boot = null;
+  await refreshSystem();
+  assert($('system-temperature').textContent === '—', 'Unavailable Pi temperature shown as zero');
+  assert(!$('system-stats').classList.contains('stale'), 'System recovery failed');
+  assert(systemBytes(null) === '—' && systemUptime(null) === '—', 'Unknown system values invented');
+  await refresh();
 
   // Sensor freshness is independent of solar data and the browser's wall clock.
   fixture.sensor = {enabled:true, name:'Cabana climate', reading:null, error:null,

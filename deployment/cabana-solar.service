@@ -1,0 +1,13 @@
+[Unit]
+Description=Cabana solar controller dashboard
+
+[Service]
+WorkingDirectory=%h/WattCycle-RS485/dashboard
+ExecStart=/usr/bin/python3 %h/WattCycle-RS485/dashboard/server.py
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+UMask=0077
+
+[Install]
+WantedBy=default.target

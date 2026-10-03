@@ -120,6 +120,11 @@ Stop the foreground server with Ctrl+C. For startup at boot, follow the
 
 ## Configuration
 
+The [Cabana installation inventory](deployment/README.md) records the verified
+Pi hardware, installed packages, enabled services, service templates and recovery
+procedure. Its [source inventory](deployment/source-inventory.md) accounts for all
+retrieved project files, including older source already retained in Git history.
+
 Configuration uses environment variables, inherited by the reader subprocess.
 
 | Variable | Default | Purpose |
@@ -135,6 +140,15 @@ Configuration uses environment variables, inherited by the reader subprocess.
 Solar collection occurs every **60 seconds**. Browsers fetch cached status every five
 seconds and graph data every minute. Solar readings older than **180 seconds** are
 marked stale. These browser requests do not trigger additional serial reads.
+
+The **Raspberry Pi** panel shows the model, total/available usable memory, free
+history-filesystem space, CPU temperature and uptime. The system API also provides
+processor, software-version and power/thermal diagnostics, without showing those
+extra details on the page. A separate cached `/api/system` endpoint refreshes
+these measurements every 30 seconds without serial or Bluetooth reads. Missing
+measurements show `—` or “unavailable”; system-information failures do not affect
+the solar and climate collectors. Hostnames, network addresses, serial numbers
+and credentials are excluded. Host statistics are not saved to the history DB.
 
 For an optional Xiaomi LYWSD03MMC sensor, set `BLUETOOTH_SENSOR_ADDRESS` in the
 service environment and restart the dashboard. Bluetooth must be powered on

@@ -1,0 +1,83 @@
+"""Back up, install and verify the ten-minute sensor history update."""
+from contextlib import closing
+from pathlib import Path
+import hashlib
+import json
+import os
+import py_compile
+import shutil
+import sqlite3
+import subprocess
+import time
+import urllib.request
+
+root=Path('/home/PI_USER/WattCycle-RS485')
+stage=root/'sensor-history-20260929'
+dashboard=root/'dashboard'
+expected={'server.py':'1a984f4bcd0d827ce45b385473852ef6711d9c52ee7844ca8d08e574cfc5e4ee',
+          'index.html':'f1eaec5106eb75d7938e61bab29c20a38157ef2d178801bc130a010b531351be',
+          'bluetooth_sensor.py':'aac746b924bc8d27efc2169328e10c47be2bc8f225e84db5b874fe43bbe74d5a'}
+for name,digest in expected.items():
+    assert hashlib.sha256((dashboard/name).read_bytes()).hexdigest()==digest, f'{name} changed since inspection'
+for name in ('server.py','bluetooth_sensor.py'):
+    py_compile.compile(str(stage/'candidate'/name),doraise=True)
+backup=stage/'backup'
+backup.mkdir(exist_ok=False)
+for name in expected:
+    shutil.copy2(dashboard/name,backup/name)
+with closing(sqlite3.connect((dashboard/'history.sqlite3').as_uri()+'?mode=ro',uri=True)) as source, \
+     closing(sqlite3.connect(backup/'history.sqlite3')) as target:
+    source.backup(target)
+    assert target.execute('PRAGMA quick_check').fetchone()==('ok',)
+    before=target.execute('SELECT COUNT(*), MIN(ts), MAX(ts) FROM samples').fetchone()
+os.chmod(backup/'history.sqlite3',0o600)
+def install(source,target):
+    temp=target.with_name(target.name+'.sensor-new')
+    shutil.copy2(source,temp)
+    os.replace(temp,target)
+def restart():
+    subprocess.run(['systemctl','--user','restart','cabana-solar'],check=True,timeout=20)
+try:
+    for name in ('bluetooth_sensor.py','server.py','index.html'):
+        install(stage/'candidate'/name,dashboard/name)
+    restart()
+    deadline=time.monotonic()+45
+    state=None
+    while time.monotonic()<deadline:
+        try:
+            with urllib.request.urlopen('http://127.0.0.1:8080/api/status',timeout=3) as response:
+                state=json.load(response)
+            sensor=state.get('sensor',{})
+            if (sensor.get('reading') and sensor.get('poll_interval_seconds')==600
+                    and sensor.get('stale_after_seconds')==1800 and not sensor.get('error')
+                    and not state['error'] and not state['stale']):
+                break
+        except OSError:
+            pass
+        time.sleep(1)
+    else:
+        raise RuntimeError(f'New dashboard did not become healthy: {state}')
+    assert 'battery_percent_estimate' not in sensor['reading']
+    with closing(sqlite3.connect((dashboard/'history.sqlite3').as_uri()+'?mode=ro',uri=True)) as db:
+        db.execute('ATTACH DATABASE ? AS backup',(str(backup/'history.sqlite3'),))
+        changed=db.execute('''SELECT COUNT(*) FROM backup.samples b
+            LEFT JOIN main.samples s ON s.ts=b.ts WHERE s.ts IS NULL OR s.data!=b.data''').fetchone()[0]
+        assert changed==0,'Existing solar records were changed or lost'
+        after=db.execute('SELECT COUNT(*), MIN(ts), MAX(ts) FROM samples').fetchone()
+        records=db.execute('SELECT ts,data FROM sensor_samples ORDER BY ts').fetchall()
+        assert records and json.loads(records[-1][1])==sensor['reading']
+        assert db.execute('PRAGMA main.quick_check').fetchone()==('ok',)
+    with urllib.request.urlopen('http://127.0.0.1:8080/api/history/range?range=all',timeout=5) as response:
+        history=json.load(response)
+    assert history['sensor_sample_count']>=1 and history['sensor_rows']
+    report=dict(status=state,solar_before=before,solar_after=after,changed_original_solar_records=changed,
+                sensor_record_count=len(records),sensor_history=history['sensor_rows'],
+                hashes={name:hashlib.sha256((dashboard/name).read_bytes()).hexdigest() for name in expected})
+    (stage/'deployed.json').write_text(json.dumps(report,indent=2))
+    print(json.dumps(report))
+except Exception:
+    # Restore application files only; never roll back newly collected data.
+    for name in expected:
+        install(backup/name,dashboard/name)
+    restart()
+    raise

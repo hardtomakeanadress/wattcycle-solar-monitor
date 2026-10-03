@@ -1,0 +1,5 @@
+# /etc/modprobe.d/blacklist-8192cu.conf
+blacklist 8192cu
+
+# /etc/modprobe.d/rfkill_default.conf
+options rfkill default_state=0
