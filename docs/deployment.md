@@ -42,7 +42,8 @@ sudo loginctl enable-linger "$USER"
 
 Verify with `loginctl show-user "$USER" -p Linger`; the value should be `yes`.
 The service restarts after an unexpected process failure. Serial read errors are
-retried during the next scheduled minute without restarting the service.
+retried during the next scheduled cycle, five minutes later, without restarting
+the service.
 
 ## Maintenance
 
@@ -68,22 +69,32 @@ suite, and start the service again. Back up the database before updates.
 ## Backups
 
 The default database is `dashboard/history.sqlite3` inside the checkout.
-If `SOLAR_DATABASE` is set, use that path instead. Reading frequency is once per
-minute: about 525,600 samples per non-leap year if collection runs continuously.
-The optional climate sensor adds 52,560 samples per year at ten-minute intervals
-in a second table in this same file; a normal SQLite backup includes both tables.
-Disk usage depends on the stored JSON and SQLite overhead; monitor free space.
+If `SOLAR_DATABASE` is set, use that path instead. Solar collection runs every
+five minutes: about 105,120 samples per non-leap year if collection runs
+continuously. Readings are committed in one SQLite transaction per cycle,
+including pending climate readings; a normal stop flushes them, and a failed
+transaction keeps them for the next cycle. The optional climate sensor adds
+52,560 samples per year at ten-minute intervals in a second table in this same
+file; a normal SQLite backup includes both tables. Disk usage depends on the
+stored JSON and SQLite overhead; monitor free space.
 
 The retention target is **at least five years**. The application never purges
-samples by age. At 2,629,800 samples over five average years, a measured database
-cost of about 852 bytes/sample projects to **2.24 GB**. This installation had
-25.7 GB free when measured on 14 September 2026. Other applications, OS updates,
-and backups consume additional space; inspect the dashboard's storage figures
-and `df -h` periodically. Keeping two full five-year backup copies would add
-roughly another 4.5 GB at that measured rate.
+samples by age. At 105,120 samples per non-leap year, five average years hold
+about 525,960 solar samples. The older one-minute database measured about
+852 bytes per stored sample; applying that figure as an estimate gives roughly
+**0.45 GB** of solar history over five years, with climate samples and OS,
+application, and backup copies adding more. This installation had 25.7 GB free
+when measured on 14 September 2026. Inspect the dashboard's storage figures and
+`df -h` periodically; two full backup copies need roughly twice the live
+database's size in additional storage.
 
-Over the years, collection retries failed reads and resumes at service startup.
-An outage leaves a gap; the application cannot reconstruct readings it never
+Over the years, collection retries failed reads, keeps failed transaction
+readings for the next cycle, and resumes at service startup. A normal
+SIGTERM/systemctl stop or Ctrl+C stops the collectors and flushes pending
+readings; sudden power loss can lose readings since the last successful commit,
+normally about five minutes, longer if storage is failing. Storage uses SQLite
+rollback journaling and synchronous FULL, unchanged by batching, and adds no new
+dependency. An outage leaves a gap; the application cannot reconstruct readings it never
 received. Standard OS maintenance such as package jobs, log rotation, temporary
 file cleanup, and filesystem maintenance does not back up this database. Keep
 an off-device backup and check that it can be restored. No automatic solar-data

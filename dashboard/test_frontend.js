@@ -25,8 +25,8 @@ const fixture = {
     today_generation_Wh: 373, today_peak_W: 231, controller_estimated_SOC_percent: 100,
     charge_status: 'float', controller_C: 20, battery_temperature_field_C: 25,
     load_on: false, fault_bits: 0},
-  error: null, stale: false, age_seconds: 10, stale_after_seconds: 180,
-  poll_interval_seconds: 60, server_time_seconds: 1789311610
+  error: null, stale: false, age_seconds: 10, stale_after_seconds: 900,
+  poll_interval_seconds: 300, server_time_seconds: 1789311610
 };
 let rows = [];
 let historyFixture = {start: fixture.server_time_seconds-86400, end: fixture.server_time_seconds,
@@ -59,8 +59,8 @@ async function runFrontendTests() {
   Date.now = () => 9999999999999;
   await refresh();
   assert($('connection').textContent === '● Live', 'Fresh reading marked stale due to browser clock');
-  assert($('updated').textContent.includes('every minute'), 'Interval label incorrect');
-  monotonicNow += 171000;
+  assert($('updated').textContent.includes('every 5 minutes'), 'Interval label incorrect');
+  monotonicNow += 891000;
   freshness();
   assert(!$('warning').classList.contains('hidden'), 'Aging reading was not flagged');
   await refresh();
@@ -152,6 +152,12 @@ async function runFrontendTests() {
   const svg = chart(metric, {...historyFixture, rows:[{ts:historyFixture.start+10,controller_C:-4},{ts:historyFixture.end-10,controller_C:0}]});
   assert(svg.includes('-4') && !svg.includes('NaN'), 'Negative/zero metric invalid');
   assert((svg.match(/M[0-9]/g)||[]).length === 2, 'Outage joined by a line');
+  const solarSVG = chart({...metric,poll_interval_seconds:300}, {
+    ...historyFixture,start:0,end:1800,bucket_seconds:60,
+    rows:[{ts:100,controller_C:20},{ts:400,controller_C:21},{ts:1600,controller_C:22}]
+  });
+  assert((solarSVG.match(/M[0-9]/g)||[]).length === 2 && solarSVG.includes('L'),
+    'Five-minute solar readings broken apart, or outage joined by a line');
   const climateMetric = {key:'sensor_temperature_C',label:'Climate temperature',unit:'°C',source:'sensor',poll_interval_seconds:600};
   const climateData = {...historyFixture,start:0,end:3000,bucket_seconds:60,sensor_bucket_seconds:600,
     rows:[{ts:120,charge_W:20}],sensor_rows:[{ts:100,sensor_temperature_C:-5},{ts:700,sensor_temperature_C:0},{ts:2900,sensor_temperature_C:4}]};

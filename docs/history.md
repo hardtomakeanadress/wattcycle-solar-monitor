@@ -1,7 +1,10 @@
 # History browsing and five-year retention
 
-Every successful controller read is saved as full JSON in SQLite once per
-minute. Retention is indefinite: the requested five-year minimum does not
+Solar collection runs every five minutes, and each cycle commits all pending
+solar and climate readings as full JSON in SQLite in one transaction, even when
+the controller read fails. A failed transaction keeps its pending readings for
+the next cycle and reports a storage error; no saved samples are deleted or
+rewritten. Retention is indefinite: the requested five-year minimum does not
 introduce a five-year deletion cutoff. Older readings remain available as long
 as the storage remains usable. Backups are described in [deployment](deployment.md#backups).
 
@@ -25,9 +28,9 @@ as the storage remains usable. Backups are described in [deployment](deployment.
 Short views use hour/minute labels and vertical time grid lines, with fewer
 labels on narrow phone screens. The full selected dates and timezone appear
 above the charts, including when a window crosses midnight or a clock change.
-Zoom changes only the displayed time window. The collector still reads once
-per minute for solar and every ten minutes for the optional climate sensor;
-there are no measurements between those saved readings.
+Zoom changes only the displayed time window. The collector still reads solar
+every five minutes and the optional climate sensor every ten minutes; there are
+no measurements between those saved readings.
 
 The page shows the earliest/latest saved dates, the number of readings in the
 selected period, displayed-point count, display interval, database size, and
@@ -63,9 +66,11 @@ estimate, and a temperature-field value does not prove an external sensor exists
 
 Queries return at most 1,000 points per source, taking the last reading from
 each bucket. The interval grows with the selected range (minimum 60 seconds
-for solar and 600 seconds for climate). Climate charts use only actual sensor
-measurements and timestamps; minute solar records do not repeat cached values. Full original
-minute records remain unchanged. Broad ranges can miss brief peaks or state
+for solar and 600 seconds for climate; the 60-second minimum preserves older
+one-minute history, though new solar measurements arrive only every five
+minutes). Climate charts use only actual sensor
+measurements and timestamps; solar records do not repeat cached values. Full
+original records remain unchanged. Broad ranges can miss brief peaks or state
 changes; the displayed min/max apply only to the returned readings. Choose a
 narrower custom range for more detail. Gaps between returned samples are drawn
 as breaks rather than uninterrupted lines. Missing fields remain absent rather
@@ -95,8 +100,9 @@ The JSON object contains:
 - `sensor_rows`: separate actual sensor timestamps and `sensor_temperature_C` /
   `sensor_humidity_percent` values for the configured sensor address.
 - `sensor_sample_count`, `sensor_bucket_seconds`: independent sensor sampling statistics.
-- Climate metrics have `source: "sensor"` and `poll_interval_seconds: 600`; their rows
-  are in `sensor_rows`, not the solar `rows` array.
+- Solar metrics include `poll_interval_seconds: 300`. Climate metrics have
+  `source: "sensor"` and `poll_interval_seconds: 600`; their rows are in
+  `sensor_rows`, not the solar `rows` array.
 - `sampling`: description of the display selection method.
 
 `charge_status` becomes an index into the supplied state labels; `load_on`

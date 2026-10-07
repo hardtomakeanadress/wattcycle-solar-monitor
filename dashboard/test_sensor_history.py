@@ -31,6 +31,8 @@ class SensorHistoryTest(unittest.TestCase):
     def test_save_restore_and_preserve_existing_solar_history(self):
         with patch.object(self.sensor, 'read', return_value=self.reading):
             self.sensor.poll_once()
+        self.assertEqual(server.history_status()['pending_sensor_samples'], 1)
+        server.flush_history()
         with server.database() as db:
             self.assertEqual(db.execute('SELECT * FROM samples').fetchall(), [(1, '{"original": true}')])
             address, ts, data = db.execute('SELECT * FROM sensor_samples').fetchone()
@@ -46,8 +48,8 @@ class SensorHistoryTest(unittest.TestCase):
         changed = dict(self.reading, temperature_C=30)
         with patch.object(self.sensor, 'read', return_value=changed), self.assertLogs(level='ERROR'):
             self.sensor.poll_once()
+            server.flush_history()
         self.assertEqual(self.sensor.snapshot()['reading'], changed)
-        self.assertIn('could not save history', self.sensor.snapshot()['error'])
         with patch.object(self.sensor, 'read', side_effect=TimeoutError), self.assertLogs(level='ERROR'):
             self.sensor.poll_once()
         with server.database() as db:
@@ -62,6 +64,7 @@ class SensorHistoryTest(unittest.TestCase):
             server.save_sensor_reading(self.sensor.address, dict(self.reading, timestamp_seconds=ts,
                                                                 temperature_C=-5, humidity_percent=0))
         server.save_sensor_reading('11:22:33:44:55:66', dict(self.reading, timestamp_seconds=1300))
+        server.flush_history()
         data = server.history_range('start=1000&end=2200')
         self.assertEqual(data['rows'], [])
         self.assertEqual(data['sample_count'], 0)

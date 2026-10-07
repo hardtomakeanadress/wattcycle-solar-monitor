@@ -19,7 +19,7 @@ packages, Docker, Home Assistant, MQTT broker, or Node.js runtime are needed.
 flowchart LR
     Controller[WattCycle MPPT controller] -->|RS485 / Modbus RTU| USB[USB RS485 adapter]
     USB --> Pi[Raspberry Pi: Python reader]
-    Pi -->|Every minute| DB[(SQLite history)]
+    Pi -->|Every five minutes| DB[(SQLite history)]
     Pi --> Web[Local web dashboard]
     Web --> Browser[Phone or computer]
 ```
@@ -29,7 +29,8 @@ flowchart LR
 - **Live dashboard:** charge watts/current, battery and PV voltage, daily Wh,
   daily peak watts, charge stage, controller temperature, battery temperature
   field, load state, and raw fault bits.
-- **One-minute collection:** one background reader regardless of browser count.
+- **Five-minute collection:** one background reader regardless of browser count;
+  each cycle commits pending solar and climate readings in one SQLite transaction.
 - **Long-term storage:** every successful reading is retained indefinitely,
   meeting a minimum five-year retention target subject to available storage.
 - **History for every measured metric:** 18 solar measurement/status charts plus optional climate history, with
@@ -41,7 +42,7 @@ flowchart LR
   setpoints or load controls are written.
 - **Reliable framing:** Modbus CRC, slave ID, response length, and model checks.
 - **Failure visibility:** stale readings, serial failures, and storage failures
-  are shown on the page; polling retries automatically.
+  are shown on the page; polling and failed storage transactions retry on the next cycle.
 - **Small footprint:** works on the tested 32-bit Raspberry Pi 2; responsive,
   self-contained HTML with no CDN, external fonts, or analytics.
 - **Automatic startup:** optional systemd user service.
@@ -115,7 +116,8 @@ Open **`http://YOUR_PI_IP:8080`** from a phone or computer on the same network.
 The first reading normally appears within a few seconds. Do not run the
 standalone reader alongside the dashboard or another serial polling program.
 
-Stop the foreground server with Ctrl+C. For startup at boot, follow the
+Stop the foreground server with Ctrl+C, which stops the collectors and flushes
+pending readings. For startup at boot, follow the
 [systemd deployment guide](docs/deployment.md).
 
 ## Configuration
@@ -137,9 +139,17 @@ Configuration uses environment variables, inherited by the reader subprocess.
 | `BLUETOOTH_SENSOR_ADDRESS` | empty (disabled) | Optional LYWSD03MMC Bluetooth address |
 | `BLUETOOTH_SENSOR_NAME` | `Cabana climate` | Climate panel title |
 
-Solar collection occurs every **60 seconds**. Browsers fetch cached status every five
-seconds and graph data every minute. Solar readings older than **180 seconds** are
-marked stale. These browser requests do not trigger additional serial reads.
+Solar collection occurs every **300 seconds (five minutes)**. Each cycle drains all
+pending solar and climate readings into one SQLite transaction, even when the
+controller read fails; live cached readings update immediately, so climate history
+can lag the live reading by about five minutes. A failed transaction keeps its
+pending readings for the next cycle and reports a storage error. A normal
+SIGTERM/Ctrl+C shutdown flushes pending readings; sudden power loss can lose
+readings since the last successful commit.
+
+Browsers fetch cached status every five seconds and graph data every minute. Solar
+readings older than **15 minutes** are marked stale. These browser requests do not
+trigger additional serial reads.
 
 The **Raspberry Pi** panel shows the model, total/available usable memory, free
 history-filesystem space, CPU temperature and uptime. The system API also provides
@@ -157,12 +167,14 @@ A separate thread connects briefly every **10 minutes**, discovers the measureme
 and notification handles by UUID, and disconnects after the first valid reading.
 Sensor timeouts cannot block the solar collector. The last successful reading
 remains visible with a warning on failure; after **30 minutes** it is stale.
-Each successful sensor reading is saved in `sensor_samples` inside the same
-SQLite database as solar history, with its own timestamp, sensor address,
-temperature, humidity, and battery voltage. Temperature and humidity are
-selectable history charts. Earlier sensor readings cannot be reconstructed.
-The last saved reading is restored after restart; a recent reading postpones
-the next connection until its ten-minute interval has elapsed. Battery voltage
+Each successful sensor reading is cached immediately and queued for the next
+five-minute transaction, then saved in `sensor_samples` inside the same SQLite
+database as solar history with its own timestamp, sensor address, temperature,
+humidity, and battery voltage, so saved climate history can trail the live
+reading by about five minutes. Temperature and humidity are selectable history
+charts. Earlier sensor readings cannot be reconstructed. The last committed
+reading is restored after restart; a recent reading postpones the next
+connection until its ten-minute interval has elapsed. Battery voltage
 is shown directly; no charge percentage is inferred. Payload format reference:
 [MiTemperature2](https://github.com/JsBergbau/MiTemperature2).
 
@@ -172,7 +184,8 @@ reverse proxy. Do not expose port 8080 directly to the public internet.
 
 ## Storage and interpretation
 
-Records are saved on the host in SQLite and survive application restarts. There
+Records are saved on the host in SQLite in one transaction per collection cycle
+and survive application restarts. No saved sample is deleted or rewritten. There
 is no age-based deletion or downsampling of the stored records. Available disk
 space and functioning storage are required; keep a backup on another device
 for data you want to retain for years. See [backup and maintenance](docs/deployment.md#backups).
@@ -186,9 +199,12 @@ readings, not every underlying sample. Narrow the dates to inspect detail.
 See [history browsing, metrics, and API](docs/history.md).
 
 The page shows saved date coverage, selected sample count, database size, and
-free space. A measured 852 bytes per sample suggests about **2.24 GB for five
-years** at one-minute intervals; growth varies with reading size and database
-overhead. This is a capacity estimate, not a guarantee against card failure.
+free space. Five-minute solar collection produces about 105,120 samples per
+non-leap year. The older one-minute database measured about 852 bytes per stored
+sample; using that figure as an estimate, a five-year solar history is roughly
+**0.45 GB**, with climate samples and OS, application, and backup copies adding
+more. Growth varies with reading size and database overhead. This is a capacity
+estimate, not a guarantee against card failure.
 
 Battery percentage is the controller's estimate, not a BMS or shunt measurement.
 The battery-temperature register does not prove that an external sensor is

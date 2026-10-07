@@ -48,6 +48,16 @@ class HistoryTest(unittest.TestCase):
         self.assertEqual(data['sample_count'], 2)
         self.assertEqual((data['available_start'], data['available_end']), (99, 200))
 
+    def test_old_minute_and_new_five_minute_readings_keep_actual_timestamps(self):
+        timestamps = [1000, 1060, 1120, 1420, 1720]
+        self.insert([(ts, {'charge_W': i}) for i, ts in enumerate(timestamps)])
+        data = server.history_range('start=1000&end=1721')
+        self.assertEqual([row['ts'] for row in data['rows']], timestamps)
+        self.assertEqual([row['charge_W'] for row in data['rows']], list(range(5)))
+        self.assertEqual(data['sample_count'], 5)
+        with server.database() as db:
+            self.assertEqual([row[0] for row in db.execute('SELECT ts FROM samples ORDER BY ts')], timestamps)
+
     def test_large_range_bounded_and_does_not_delete_five_year_old_data(self):
         self.insert([(60*i, {'charge_W': i}) for i in range(2001)])
         with patch.object(server.time, 'time', return_value=5*366*86400):

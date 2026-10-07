@@ -30,7 +30,7 @@
 <div class="card"><div class="label">GENERATED TODAY</div><div class="value"><span id="today_generation_Wh">—</span><span class="unit">Wh</span></div><small>Peak <span id="today_peak_W">—</span> W today</small></div>
 </section>
 <section class="panel history-panel" aria-label="Measurement history">
-<div class="charthead"><h2>Explore your history</h2><small>Solar: 1 min · Climate: 10 min</small></div>
+<div class="charthead"><h2>Explore your history</h2><small>Solar: 5 min · Climate: 10 min</small></div>
 <div class="history-controls">
 <label>Time range<select id="range" onchange="rangeChanged()"><option value="900">Last 15 minutes</option><option value="3600">Last hour</option><option value="21600">Last 6 hours</option><option value="86400" selected>Last 24 hours</option><option value="604800">Last 7 days</option><option value="2592000">Last 30 days</option><option value="31557600">Last year</option><option value="all">All saved history</option><option value="custom">Custom dates</option><option id="follow-option" value="follow" hidden>Latest at current zoom</option></select></label>
 <label>Measurements<select id="metric" onchange="renderHistory()"><option value="overview">Overview: charging, battery &amp; solar</option><option value="all">Every metric</option></select></label>
@@ -48,8 +48,8 @@
 <div id="history-message" class="history-message" role="status">Loading history…</div>
 <p id="history-coverage" class="history-note"></p>
 <div id="charts" class="charts"></div>
-<p class="history-note">Move across or tap a chart to inspect the nearest reading. Zoom in for minute detail; Earlier and Later move by one window. Latest follows incoming readings at the current zoom. Times use your browser’s local timezone. Solar readings are collected every minute and climate readings every 10 minutes; zoom cannot reveal measurements between readings.</p>
-<p class="history-note">Solar input is panel voltage; charging power is the controller’s output to the battery. Daily energy counters reset each day. Long ranges show representative readings, so brief peaks and state changes may be omitted. Full minute readings stay in storage.</p>
+<p class="history-note">Move across or tap a chart to inspect the nearest reading. Earlier and Later move by one window. Latest follows incoming readings at the current zoom. Times use your browser’s local timezone. Solar readings are collected every 5 minutes and climate readings every 10 minutes. Older solar history keeps its original one-minute detail; all readings are plotted at their actual times. Zoom cannot reveal measurements between readings. Climate history may take about 5 minutes to appear after a live reading.</p>
+<p class="history-note">Solar input is panel voltage; charging power is the controller’s output to the battery. Daily energy counters reset each day. Long ranges show representative readings, so brief peaks and state changes may be omitted. All saved readings, including older minute readings, stay in storage.</p>
 </section>
 <div class="panels"><section class="panel"><h2>Controller status</h2><div class="row"><span>Charge stage</span><strong id="stage">—</strong></div><div class="row"><span>Controller temperature</span><strong id="temp">—</strong></div><div class="row"><span>Battery temperature field</span><strong id="batterytemp">—</strong></div><div class="row"><span>DC load</span><strong id="load">—</strong></div><div class="row"><span>Faults</span><strong id="faults">—</strong></div></section></div>
 <section class="panel system-panel" aria-labelledby="system-title">
@@ -100,7 +100,7 @@ function freshness() {
     : status.error || 'Waiting for fresh controller data.');
   if (reading) {
     const interval = status.poll_interval_seconds;
-    const frequency = interval === 60 ? 'every minute' : `every ${interval} seconds`;
+    const frequency = interval === 60 ? 'every minute' : interval % 60 === 0 ? `every ${interval / 60} minutes` : `every ${interval} seconds`;
     put('updated', `Last reading ${new Date(reading.timestamp_utc).toLocaleString()} · ${frequency}`);
   }
 }
@@ -226,7 +226,7 @@ function chart(metric, data) {
     if (!Number.isFinite(r[key])) { previous = null; continue; }
     const xx = x(r.ts).toFixed(1), yy = y(r[key]).toFixed(1);
     const bucket = metric.source === 'sensor' ? data.sensor_bucket_seconds : data.bucket_seconds;
-    const connected = previous !== null && r.ts - previous < Math.max((metric.poll_interval_seconds || 60) * 3, bucket * 2);
+    const connected = previous !== null && r.ts - previous < Math.max((metric.poll_interval_seconds || 300) * 3, bucket * 2);
     // States and daily counters are drawn as steps; outages are not joined.
     const step = metric.states || key.startsWith('today_') || key === 'fault_bits';
     path += connected ? (step ? `H${xx} V${yy} ` : `L${xx},${yy} `) : `M${xx},${yy} `;

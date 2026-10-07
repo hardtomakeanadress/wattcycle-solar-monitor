@@ -65,7 +65,7 @@ class DashboardTest(unittest.TestCase):
              self.assertLogs(level='ERROR'):
             server.poll_once()
         self.assertEqual(server.STATE['reading'], self.reading)
-        self.assertIn('could not save history', server.STATE['error'])
+        self.assertIn('could not save history', server.snapshot()['error'])
         with patch.object(server.subprocess, 'run', return_value=self.result):
             server.poll_once()
         self.assertIsNone(server.STATE['error'])
@@ -87,19 +87,19 @@ class DashboardTest(unittest.TestCase):
         with patch.object(server.time, 'time', return_value=timestamp + 120):
             state = server.snapshot()
             self.assertFalse(state['stale'])
-            self.assertEqual(state['poll_interval_seconds'], 60)
-            self.assertEqual(state['stale_after_seconds'], 180)
-        with patch.object(server.time, 'time', return_value=timestamp + 181):
+            self.assertEqual(state['poll_interval_seconds'], 300)
+            self.assertEqual(state['stale_after_seconds'], 900)
+        with patch.object(server.time, 'time', return_value=timestamp + 901):
             self.assertTrue(server.snapshot()['stale'])
 
     def test_schedule_accounts_for_time_spent_reading(self):
         with patch.object(server, 'poll_once') as poll, \
              patch.object(server.time, 'monotonic', side_effect=[100, 105]), \
-             patch.object(server.time, 'sleep', side_effect=InterruptedError) as sleep:
+             patch.object(server.STOP, 'wait', side_effect=InterruptedError) as sleep:
             with self.assertRaises(InterruptedError):
                 server.poll_loop()
             poll.assert_called_once()
-            sleep.assert_called_once_with(55)
+            sleep.assert_called_once_with(295)
 
     def test_history_api_is_bounded_without_deleting_older_data(self):
         with server.database() as db:

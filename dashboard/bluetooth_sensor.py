@@ -153,18 +153,23 @@ class XiaomiSensor:
         with self.lock:
             self.state.update(reading=reading, error=error, last_attempt=attempt)
 
-    def poll_loop(self):
+    def poll_loop(self, stop_event=None):
+        wait = stop_event.wait if stop_event is not None else time.sleep
         # A restart must not trigger another radio connection for a recent sample.
         reading = self.snapshot()['reading']
         if reading:
             remaining = min(INTERVAL, max(0, INTERVAL - (time.time() - reading['timestamp_seconds'])))
             if remaining:
-                time.sleep(remaining)
-        while True:
+                if wait(remaining):
+                    return
+        while stop_event is None or not stop_event.is_set():
             start = time.monotonic()
             self.poll_once()
-            time.sleep(max(1, INTERVAL - (time.monotonic() - start)))
+            wait(max(1, INTERVAL - (time.monotonic() - start)))
 
-    def start(self):
+    def start(self, stop_event=None):
         if self.address:
-            threading.Thread(target=self.poll_loop, daemon=True, name='bluetooth-sensor').start()
+            thread = threading.Thread(target=self.poll_loop, args=(stop_event,),
+                                      daemon=True, name='bluetooth-sensor')
+            thread.start()
+            return thread

@@ -6,6 +6,7 @@ import logging
 import math
 import os
 from pathlib import Path
+import signal
 import sqlite3
 import subprocess
 import sys
@@ -20,10 +21,14 @@ ROOT = Path(__file__).resolve().parent
 READER = ROOT.parent / 'read_controller.py'
 DB = Path(os.environ.get('SOLAR_DATABASE', str(ROOT / 'history.sqlite3'))).expanduser()
 SYSTEM = SystemInfo(DB.parent)
-INTERVAL = 60
+INTERVAL = 300
 STALE_AFTER = INTERVAL * 3
 LOCK = threading.Lock()
 STATE = {'reading': None, 'error': None, 'last_attempt': None}
+STOP = threading.Event()
+PENDING_LOCK = threading.Lock()
+PENDING = {'solar': [], 'sensor': []}
+HISTORY_ERROR = None
 SENSOR = XiaomiSensor(os.environ.get('BLUETOOTH_SENSOR_ADDRESS', ''),
                      os.environ.get('BLUETOOTH_SENSOR_NAME', 'Cabana climate'))
 
@@ -135,7 +140,7 @@ def history_range(query):
                 available_start=first[0] if first else None,
                 available_end=last[0] if last else None,
                 sampling='Last reading per display bucket; full samples retained indefinitely.',
-                metrics=[dict(key=k, label=label, unit=unit,
+                metrics=[dict(key=k, label=label, unit=unit, poll_interval_seconds=INTERVAL,
                               states=CHARGE_STATES if k == 'charge_status' else
                               ['Off', 'On'] if k == 'load_on' else None)
                          for k, label, unit in METRICS] +
@@ -156,15 +161,20 @@ def database():
 
 
 def initialize():
+    global HISTORY_ERROR
+    with PENDING_LOCK:
+        PENDING['solar'].clear()
+        PENDING['sensor'].clear()
+        HISTORY_ERROR = None
     DB.parent.mkdir(parents=True, exist_ok=True)
     with database() as db:
         db.execute('CREATE TABLE IF NOT EXISTS samples (ts REAL PRIMARY KEY, data TEXT NOT NULL)')
         db.execute('''CREATE TABLE IF NOT EXISTS sensor_samples (
             sensor_address TEXT NOT NULL, ts REAL NOT NULL, data TEXT NOT NULL,
             PRIMARY KEY (sensor_address, ts))''')
-        row = db.execute('SELECT data FROM samples ORDER BY ts DESC LIMIT 1').fetchone()
+        row = db.execute('SELECT ts, data FROM samples ORDER BY ts DESC LIMIT 1').fetchone()
         if row:
-            STATE['reading'] = json.loads(row[0])
+            STATE.update(reading=json.loads(row[1]), last_attempt=row[0])
         sensor_row = db.execute('SELECT data FROM sensor_samples WHERE sensor_address=? ORDER BY ts DESC LIMIT 1',
                                 (SENSOR.address,)).fetchone()
     SENSOR.on_reading = save_sensor_reading
@@ -172,10 +182,45 @@ def initialize():
 
 
 def save_sensor_reading(address, reading):
-    with database() as db:
-        # Store each actual Bluetooth measurement once, at its own timestamp.
-        db.execute('INSERT INTO sensor_samples VALUES (?, ?, ?)',
-                   (address, reading['timestamp_seconds'], json.dumps(reading)))
+    # Preserve the actual measurement time while waiting for the next batch.
+    row = (address, reading['timestamp_seconds'], json.dumps(reading))
+    with PENDING_LOCK:
+        PENDING['sensor'].append(row)
+
+
+def flush_history():
+    """Commit both sources atomically; keep the whole batch after storage failure."""
+    global HISTORY_ERROR
+    with PENDING_LOCK:
+        if not any(PENDING.values()):
+            return True
+        try:
+            with database() as db:
+                # A repeated timestamp must neither overwrite history nor block
+                # unrelated readings in this and subsequent batches.
+                solar = db.executemany('INSERT INTO samples VALUES (?, ?) ON CONFLICT(ts) DO NOTHING',
+                                       PENDING['solar'])
+                sensor = db.executemany('''INSERT INTO sensor_samples VALUES (?, ?, ?)
+                    ON CONFLICT(sensor_address, ts) DO NOTHING''', PENDING['sensor'])
+                duplicates = (len(PENDING['solar']) - solar.rowcount +
+                              len(PENDING['sensor']) - sensor.rowcount)
+        except Exception:
+            logging.exception('Saving history batch failed; retaining readings for retry')
+            HISTORY_ERROR = 'Live readings received, but could not save history. Retrying every 5 minutes; check storage on the Pi.'
+            return False
+        PENDING['solar'].clear()
+        PENDING['sensor'].clear()
+        HISTORY_ERROR = None
+        if duplicates:
+            logging.error('Skipped %s duplicate history timestamps; existing readings preserved', duplicates)
+        return True
+
+
+def history_status():
+    with PENDING_LOCK:
+        return dict(commit_interval_seconds=INTERVAL, error=HISTORY_ERROR,
+                    pending_solar_samples=len(PENDING['solar']),
+                    pending_sensor_samples=len(PENDING['sensor']))
 
 
 def poll_once():
@@ -190,25 +235,26 @@ def poll_once():
         logging.exception('Controller read failed')
         with LOCK:
             STATE.update(error='Controller read failed; retrying automatically.', last_attempt=attempt)
-        return
-    error = None
-    try:
-        with database() as db:
-            # Keep every sample indefinitely; the graph's time window is separate.
-            # Never replace an existing reading if the system clock repeats a timestamp.
-            db.execute('INSERT INTO samples VALUES (?, ?)', (attempt, json.dumps(reading)))
-    except Exception:
-        logging.exception('Saving controller reading failed')
-        error = 'Live reading received, but could not save history. Check storage on the Pi.'
-    with LOCK:
-        STATE.update(reading=reading, error=error, last_attempt=attempt)
+    else:
+        with PENDING_LOCK:
+            PENDING['solar'].append((attempt, json.dumps(reading)))
+        with LOCK:
+            STATE.update(reading=reading, error=None, last_attempt=attempt)
+    # Climate collection and storage retries continue even if Modbus is offline.
+    flush_history()
 
 
 def poll_loop():
-    while True:
+    with LOCK:
+        last_attempt = STATE['last_attempt']
+    if last_attempt is not None:
+        remaining = min(INTERVAL, max(0, INTERVAL - (time.time() - last_attempt)))
+        if STOP.wait(remaining):
+            return
+    while not STOP.is_set():
         start = time.monotonic()
         poll_once()
-        time.sleep(max(1, INTERVAL - (time.monotonic() - start)))
+        STOP.wait(max(1, INTERVAL - (time.monotonic() - start)))
 
 
 def snapshot():
@@ -219,6 +265,9 @@ def snapshot():
     data.update(age_seconds=age, stale=age is None or age > STALE_AFTER, server_time_seconds=time.time(),
                 stale_after_seconds=STALE_AFTER, poll_interval_seconds=INTERVAL)
     data['sensor'] = SENSOR.snapshot()
+    data['history'] = history_status()
+    data['error'] = data['error'] or data['history']['error']
+    data['sensor']['error'] = data['sensor']['error'] or data['history']['error']
     return data
 
 
@@ -269,12 +318,35 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
 
-if __name__ == '__main__':
+def main():
     logging.basicConfig(level=logging.INFO)
     initialize()
-    threading.Thread(target=poll_loop, daemon=True).start()
-    SENSOR.start()
+    STOP.clear()
     server = ThreadingHTTPServer((os.environ.get('DASHBOARD_BIND', '0.0.0.0'), int(os.environ.get('DASHBOARD_PORT', '8080'))), Handler)
     server.daemon_threads = True
-    logging.info('Dashboard listening on %s:%s', *server.server_address)
-    server.serve_forever()
+    def stop(_signum, _frame):
+        raise KeyboardInterrupt
+    signal.signal(signal.SIGTERM, stop)
+    collector = threading.Thread(target=poll_loop, daemon=True, name='solar-collector')
+    sensor_thread = None
+    try:
+        collector.start()
+        sensor_thread = SENSOR.start(STOP)
+        logging.info('Dashboard listening on %s:%s', *server.server_address)
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        STOP.set()
+        # Hardware calls have bounded timeouts; finish accepted readings before
+        # flushing. systemd's normal stop timeout allows both collectors to exit.
+        collector.join()
+        if sensor_thread is not None:
+            sensor_thread.join()
+        saved = flush_history()
+        server.server_close()
+    return 0 if saved else 1
+
+
+if __name__ == '__main__':
+    sys.exit(main())

@@ -6,6 +6,17 @@ application directories on the Pi contain older rollout snapshots. The
 [source inventory](source-inventory.md) accounts for all 27 retrieved source and
 service files, including the original reader and two historical deployment scripts.
 
+**Collection update, 7 October 2026:** the solar controller is now read every
+300 seconds (climate remains every 600 seconds), and each five-minute cycle
+commits pending solar and climate readings in one SQLite transaction, including
+cycles where the controller read fails. Climate history can therefore lag its
+live reading by about five minutes. A failed transaction keeps its readings for
+retry and reports a storage error; no saved samples are deleted or rewritten.
+A normal stop flushes pending readings, while sudden power loss can lose
+readings since the last successful commit. On restart, the latest committed
+readings are restored and collection waits out the remaining polling interval.
+The rest of this inventory describes the 3 October 2026 verification.
+
 ## Verified host
 
 | Item | Observed configuration |
@@ -23,7 +34,7 @@ service files, including the original reader and two historical deployment scrip
 | Service | User service cabana-solar, enabled, with user lingering enabled |
 | HTTP | Port 8080; trusted network or Tailscale access |
 | Database | ~/WattCycle-RS485/dashboard/history.sqlite3 |
-| Collection | Solar every 60 seconds; climate every 600 seconds |
+| Collection | Solar every 300 seconds and climate every 600 seconds (solar cadence updated 7 October 2026; 60 seconds at the 3 October verification) |
 
 The webpage measures the running host rather than copying this table. Its storage
 figures describe the filesystem holding the configured database. Usable memory
@@ -121,7 +132,8 @@ vcgencmd get_throttled
 ```
 
 The system journal selector above works on this Pi, where journalctl --user finds
-no user journal files. Controller failures retry at the next minute. The Pi
+no user journal files. Controller failures retry at the next cycle, five minutes
+later, and pending readings are committed with that cycle's transaction. The Pi
 information endpoint is independent and performs no serial/Bluetooth reads.
 
 No additional custom project was found in the accessible user home, /opt, /srv or
