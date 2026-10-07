@@ -132,6 +132,38 @@ class BatchHistoryTest(unittest.TestCase):
         with database() as db:
             self.assertEqual(db.execute('SELECT ts FROM sensor_samples ORDER BY ts').fetchall(), [(1000,), (1600,)])
 
+    def test_full_buffer_preserves_accepted_rows_counts_loss_and_recovers(self):
+        with patch.object(server, 'PENDING_LIMITS', {'solar': 3, 'sensor': 2}):
+            with patch.object(server, 'database', side_effect=sqlite3.OperationalError('read-only')), \
+                 patch.object(server.subprocess, 'run', return_value=self.result), self.assertLogs(level='ERROR'):
+                for i in range(8):
+                    with patch.object(server.time, 'time', return_value=1000 + i*300):
+                        server.save_sensor_reading(server.SENSOR.address, dict(self.reading, timestamp_seconds=1000+i*300))
+                        server.poll_once()
+            status = server.snapshot()
+            self.assertEqual(status['reading'], self.solar)  # Live data still updates.
+            h = status['history']
+            self.assertEqual((h['pending_solar_samples'], h['pending_sensor_samples']), (3, 2))
+            self.assertEqual((h['dropped_solar_samples'], h['dropped_sensor_samples']), (5, 6))
+            self.assertEqual(h['pending_limits'], {'solar': 3, 'sensor': 2})
+            with patch.object(server.time, 'time', return_value=3700):
+                self.assertEqual(server.history_status()['oldest_pending_age_seconds'], 2700)
+            self.assertTrue(server.flush_history())
+            with server.database() as db:
+                self.assertEqual(db.execute('SELECT ts FROM samples ORDER BY ts').fetchall(), [(1000,), (1300,), (1600,)])
+                self.assertEqual(db.execute('SELECT ts FROM sensor_samples ORDER BY ts').fetchall(), [(1000,), (1300,)])
+            h = server.history_status()
+            self.assertIsNone(h['error'])
+            self.assertIsNone(h['oldest_pending_age_seconds'])
+            self.assertEqual(h['dropped_solar_samples'], 5)  # Loss stays visible after recovery.
+            server.save_sensor_reading(server.SENSOR.address, dict(self.reading, timestamp_seconds=4000))
+            self.assertTrue(server.flush_history())
+            with server.database() as db:
+                self.assertEqual(db.execute('SELECT COUNT(*) FROM sensor_samples').fetchone()[0], 3)
+
+    def test_default_capacity_is_seven_days_per_source(self):
+        self.assertEqual(server.PENDING_LIMITS, {'solar': 2016, 'sensor': 1008})
+
     def test_restart_waits_remaining_five_minutes(self):
         with server.database() as db:
             db.execute('INSERT INTO samples VALUES (1000, ?)', (json.dumps(self.solar),))

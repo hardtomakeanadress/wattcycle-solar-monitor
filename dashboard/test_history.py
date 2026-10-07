@@ -38,7 +38,7 @@ class HistoryTest(unittest.TestCase):
         self.assertEqual(first['PV_V'], 42)
         self.assertIsNone(second['battery_V'])
         self.assertIsNone(second['charge_status'])
-        self.assertEqual({m['key'] for m in data['metrics']}, set(first) - {'ts'})
+        self.assertEqual({m['key'] for m in data['metrics']}, set(first) - {'ts', 'poll_interval_seconds'})
         self.assertGreater(data['storage']['free_bytes'], 0)
 
     def test_custom_range_inclusive_start_exclusive_end(self):
@@ -57,6 +57,24 @@ class HistoryTest(unittest.TestCase):
         self.assertEqual(data['sample_count'], 5)
         with server.database() as db:
             self.assertEqual([row[0] for row in db.execute('SELECT ts FROM samples ORDER BY ts')], timestamps)
+
+    def test_historical_cadence_survives_ranges_buckets_and_restart(self):
+        timestamps = [1000, 1060, 1660, 1960, 2260]
+        self.insert([(ts, {'charge_W': i}) for i, ts in enumerate(timestamps)])
+        with server.database() as db:
+            before = db.execute('SELECT * FROM samples ORDER BY ts').fetchall()
+            db.execute('INSERT INTO solar_intervals VALUES (1960, 300)')
+            changes = db.execute('SELECT * FROM solar_intervals ORDER BY start_ts').fetchall()
+        server.initialize()
+        for query, expected in [('start=1000&end=2261', [60, 60, 60, 300, 300]),
+                                ('start=1600&end=2261', [60, 300, 300]),
+                                ('start=1000&end=1001000', [300, 300])]:
+            with self.subTest(query=query):
+                rows = server.history_range(query)['rows']
+                self.assertEqual([r['poll_interval_seconds'] for r in rows], expected)
+        with server.database() as db:
+            self.assertEqual(db.execute('SELECT * FROM samples ORDER BY ts').fetchall(), before)
+            self.assertEqual(db.execute('SELECT * FROM solar_intervals ORDER BY start_ts').fetchall(), changes)
 
     def test_large_range_bounded_and_does_not_delete_five_year_old_data(self):
         self.insert([(60*i, {'charge_W': i}) for i in range(2001)])

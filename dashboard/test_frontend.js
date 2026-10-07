@@ -77,6 +77,27 @@ async function runFrontendTests() {
   assert($('warning').textContent.includes('could not save'), 'Storage failure hidden');
   fixture.error = null;
 
+  fixture.history = {error:'Disk full',pending_solar_samples:2016,pending_sensor_samples:1008,
+    oldest_pending_age_seconds:7*86400,pending_limits:{solar:2016,sensor:1008},
+    dropped_solar_samples:3,dropped_sensor_samples:2};
+  await refresh();
+  assert(!$('history-storage-warning').classList.contains('hidden'), 'Storage backlog hidden');
+  assert($('history-storage-warning').textContent.includes('2016 solar / 1008 climate readings waiting') &&
+    $('history-storage-warning').textContent.includes('7d') &&
+    $('history-storage-warning').textContent.includes('3 solar / 2 climate readings were not recorded'), 'Backlog, age or loss counts omitted');
+  fixture.history.error = null; fixture.history.pending_solar_samples = 0; fixture.history.pending_sensor_samples = 0;
+  fixture.history.oldest_pending_age_seconds = null;
+  await refresh();
+  assert($('history-storage-warning').textContent.includes('recovered') &&
+    !$('history-storage-warning').classList.contains('hidden'), 'Recovery hides lost history');
+  failedFetch = true; await refresh();
+  assert($('history-storage-warning').textContent.startsWith('Last known'), 'Offline storage shown as current');
+  failedFetch = false;
+  fixture.history.dropped_solar_samples = 0; fixture.history.dropped_sensor_samples = 0;
+  await refresh();
+  assert($('history-storage-warning').classList.contains('hidden'), 'Healthy storage shows a warning');
+  delete fixture.history;
+
   await refresh();
   await refreshSystem();
   assert($('system-model').textContent.includes('Raspberry Pi 2'), 'Pi model omitted');
@@ -158,6 +179,17 @@ async function runFrontendTests() {
   });
   assert((solarSVG.match(/M[0-9]/g)||[]).length === 2 && solarSVG.includes('L'),
     'Five-minute solar readings broken apart, or outage joined by a line');
+  const mixedSVG = chart({...metric,poll_interval_seconds:300}, {
+    start:0,end:2500,bucket_seconds:60,
+    rows:[{ts:0,controller_C:20,poll_interval_seconds:60},
+      {ts:60,controller_C:21,poll_interval_seconds:60},
+      {ts:660,controller_C:22,poll_interval_seconds:60},
+      {ts:960,controller_C:23,poll_interval_seconds:300},
+      {ts:1260,controller_C:24,poll_interval_seconds:300},
+      {ts:2460,controller_C:25,poll_interval_seconds:300}]
+  });
+  assert((mixedSVG.match(/M[0-9]/g)||[]).length === 3 && (mixedSVG.match(/L[0-9]/g)||[]).length === 3,
+    'Historical outage, cadence transition, regular five-minute points or new outage drawn incorrectly');
   const climateMetric = {key:'sensor_temperature_C',label:'Climate temperature',unit:'°C',source:'sensor',poll_interval_seconds:600};
   const climateData = {...historyFixture,start:0,end:3000,bucket_seconds:60,sensor_bucket_seconds:600,
     rows:[{ts:120,charge_W:20}],sensor_rows:[{ts:100,sensor_temperature_C:-5},{ts:700,sensor_temperature_C:0},{ts:2900,sensor_temperature_C:4}]};

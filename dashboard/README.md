@@ -12,6 +12,14 @@ for the next cycle and reports a storage error. Browser requests return cached
 readings; opening more tabs does not create more Modbus pollers. The serial
 connection is released between readings.
 
+RAM retry buffers hold at most 2,016 solar and 1,008 climate readings (seven
+days per source). A full buffer keeps accepted readings and skips new history
+entries while live values keep updating. `/api/status.history` exposes
+`pending_limits`, `oldest_pending_age_seconds`, and `dropped_solar_samples` /
+`dropped_sensor_samples` alongside pending counts. The page displays storage
+warnings and keeps loss counts visible after recovery. Counts cover the
+current process lifetime; they reset on restart.
+
 When `BLUETOOTH_SENSOR_ADDRESS` is configured, `bluetooth_sensor.py` runs a
 separate ten-minute collector using the existing BlueZ command-line tools.
 `/api/status` includes a `sensor` object with its own reading, error, age, and
@@ -31,6 +39,9 @@ CREATE TABLE sensor_samples (
     sensor_address TEXT NOT NULL, ts REAL NOT NULL, data TEXT NOT NULL,
     PRIMARY KEY (sensor_address, ts)
 );
+CREATE TABLE solar_intervals (
+    start_ts REAL PRIMARY KEY, interval_seconds INTEGER NOT NULL
+);
 ```
 
 For solar samples, `ts` is the collection attempt's Unix timestamp in seconds; `data` contains the
@@ -41,6 +52,10 @@ needed for meaningful timestamps and the 24-hour graph.
 Sensor `ts` is its actual notification receipt time, not the solar polling time.
 Its JSON contains temperature, humidity, battery voltage, and UTC/Unix timestamps.
 Startup adds the sensor table if missing without changing the solar table.
+`solar_intervals` records collection cadence changes separately from samples.
+Rows before the first known change use the historical 60-second cadence;
+startup records the current cadence only when it changes. See the deployment
+guide before upgrading a database already collected at five-minute intervals.
 
 | Endpoint | Response |
 | --- | --- |
@@ -70,7 +85,7 @@ required. Late responses from an earlier date selection are ignored.
 
 Controller read failures preserve the previous reading, show a warning, and the
 cycle still commits any pending readings. Storage failures show a distinct
-warning while displaying the latest live value; pending readings are retained
+warning while displaying the latest live value; accepted pending readings are retained
 for retry on the next cycle, and no stored samples are deleted or rewritten.
 Solar readings more than 15 minutes old are marked stale; climate readings
 after 30 minutes. Requests for unavailable history return 503.

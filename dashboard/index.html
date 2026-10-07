@@ -45,6 +45,7 @@
 <button id="latest" type="button" onclick="navigateHistory('latest')" disabled>Latest</button>
 </div>
 <p id="history-window" class="history-note" aria-live="polite"></p>
+<div id="history-storage-warning" class="warning hidden" role="status"></div>
 <div id="history-message" class="history-message" role="status">Loading history…</div>
 <p id="history-coverage" class="history-note"></p>
 <div id="charts" class="charts"></div>
@@ -88,6 +89,7 @@ async function getJSON(url) {
 function elapsed() { return Math.max(0, (performance.now() - receivedAt) / 1000); }
 
 function freshness() {
+  historyStorageStatus();
   sensorFreshness();
   systemFreshness();
   const reading = status?.reading;
@@ -103,6 +105,20 @@ function freshness() {
     const frequency = interval === 60 ? 'every minute' : interval % 60 === 0 ? `every ${interval / 60} minutes` : `every ${interval} seconds`;
     put('updated', `Last reading ${new Date(reading.timestamp_utc).toLocaleString()} · ${frequency}`);
   }
+}
+
+function historyStorageStatus() {
+  const h = status?.history;
+  const solarLost = h?.dropped_solar_samples || 0, climateLost = h?.dropped_sensor_samples || 0;
+  const show = !!h && (!!h.error || solarLost + climateLost > 0);
+  $('history-storage-warning').classList.toggle('hidden', !show);
+  if (!show) return;
+  const waiting = `${h.pending_solar_samples || 0} solar / ${h.pending_sensor_samples || 0} climate readings waiting`;
+  const age = h.oldest_pending_age_seconds == null ? '' : `; oldest waiting ${systemUptime(h.oldest_pending_age_seconds + elapsed())}`;
+  const limits = h.pending_limits ? ` Buffer holds up to ${h.pending_limits.solar} solar / ${h.pending_limits.sensor} climate readings.` : '';
+  const lost = solarLost + climateLost ? ` ${solarLost} solar / ${climateLost} climate readings were not recorded because the buffer filled, since this service started.` : '';
+  put('history-storage-warning', (!connected ? 'Last known storage status. ' : '') +
+    (h.error ? `History storage unavailable: ${waiting}${age}. Retrying automatically.` : 'History storage recovered.') + limits + lost);
 }
 
 function sensorFreshness() {
@@ -226,7 +242,8 @@ function chart(metric, data) {
     if (!Number.isFinite(r[key])) { previous = null; continue; }
     const xx = x(r.ts).toFixed(1), yy = y(r[key]).toFixed(1);
     const bucket = metric.source === 'sensor' ? data.sensor_bucket_seconds : data.bucket_seconds;
-    const connected = previous !== null && r.ts - previous < Math.max((metric.poll_interval_seconds || 300) * 3, bucket * 2);
+    const interval = r.poll_interval_seconds || metric.poll_interval_seconds || 300;
+    const connected = previous !== null && r.ts - previous < Math.max(interval * 3, bucket * 2);
     // States and daily counters are drawn as steps; outages are not joined.
     const step = metric.states || key.startsWith('today_') || key === 'fault_bits';
     path += connected ? (step ? `H${xx} V${yy} ` : `L${xx},${yy} `) : `M${xx},${yy} `;

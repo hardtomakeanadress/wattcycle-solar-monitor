@@ -72,8 +72,11 @@ minutes). Climate charts use only actual sensor
 measurements and timestamps; solar records do not repeat cached values. Full
 original records remain unchanged. Broad ranges can miss brief peaks or state
 changes; the displayed min/max apply only to the returned readings. Choose a
-narrower custom range for more detail. Gaps between returned samples are drawn
-as breaks rather than uninterrupted lines. Missing fields remain absent rather
+narrower custom range for more detail. Lines break when a gap reaches three
+collection intervals or twice the display bucket, whichever is larger.
+Solar rows carry their historical cadence from `solar_intervals`, so legacy
+one-minute gaps retain their original breaks while new five-minute readings
+connect normally. Missing fields remain absent rather
 than becoming zero; genuine zero and negative values are supported.
 
 ## Range API
@@ -96,7 +99,9 @@ The JSON object contains:
 - `available_start`, `available_end` for overall saved date coverage, or null.
 - `storage.database_bytes`, `storage.free_bytes` in bytes.
 - `metrics`: keys, labels, units, and optional state-label arrays.
-- `rows`: collection timestamps (`ts`) and each measured scalar field.
+- `rows`: collection timestamps (`ts`), historical `poll_interval_seconds`,
+  and each measured scalar field. Row cadence takes precedence over the
+  metric's current cadence when drawing gaps.
 - `sensor_rows`: separate actual sensor timestamps and `sensor_temperature_C` /
   `sensor_humidity_percent` values for the configured sensor address.
 - `sensor_sample_count`, `sensor_bucket_seconds`: independent sensor sampling statistics.

@@ -1,5 +1,6 @@
 """Small standard-library dashboard. One serial reader; browsers use cached data."""
 import datetime
+from bisect import bisect_right
 from contextlib import contextmanager
 import json
 import logging
@@ -28,6 +29,9 @@ STATE = {'reading': None, 'error': None, 'last_attempt': None}
 STOP = threading.Event()
 PENDING_LOCK = threading.Lock()
 PENDING = {'solar': [], 'sensor': []}
+# Keep accepted readings during a storage outage without exhausting Pi RAM.
+PENDING_LIMITS = {'solar': 7 * 86400 // INTERVAL, 'sensor': 7 * 86400 // SENSOR_INTERVAL}
+DROPPED = {'solar': 0, 'sensor': 0}
 HISTORY_ERROR = None
 SENSOR = XiaomiSensor(os.environ.get('BLUETOOTH_SENSOR_ADDRESS', ''),
                      os.environ.get('BLUETOOTH_SENSOR_NAME', 'Cabana climate'))
@@ -82,6 +86,7 @@ def history_range(query):
         if not all(math.isfinite(v) and 0 <= v <= 253402300799 for v in (start, end)) or start >= end:
             raise InvalidRange('Use finite timestamps with 0 <= start < end.')
     with database() as db:
+        cadence = db.execute('SELECT start_ts, interval_seconds FROM solar_intervals ORDER BY start_ts').fetchall()
         first = db.execute('SELECT ts FROM samples ORDER BY ts LIMIT 1').fetchone()
         last = db.execute('SELECT ts FROM samples ORDER BY ts DESC LIMIT 1').fetchone()
         sensor_first = db.execute('SELECT ts FROM sensor_samples WHERE sensor_address=? ORDER BY ts LIMIT 1',
@@ -112,9 +117,11 @@ def history_range(query):
         sensor_count = db.execute('SELECT COUNT(*) FROM sensor_samples WHERE sensor_address=? AND ts >= ? AND ts < ?',
                                   (SENSOR.address, start, end)).fetchone()[0]
     rows = []
+    cadence_starts = [change[0] for change in cadence]
     for ts, raw in selected:
         reading = json.loads(raw)
-        row = {'ts': ts}
+        change = bisect_right(cadence_starts, ts) - 1
+        row = {'ts': ts, 'poll_interval_seconds': cadence[change][1] if change >= 0 else 60}
         for key, _, _ in METRICS:
             value = reading.get(key)
             if key == 'charge_status':
@@ -165,6 +172,7 @@ def initialize():
     with PENDING_LOCK:
         PENDING['solar'].clear()
         PENDING['sensor'].clear()
+        DROPPED.update(solar=0, sensor=0)
         HISTORY_ERROR = None
     DB.parent.mkdir(parents=True, exist_ok=True)
     with database() as db:
@@ -172,6 +180,13 @@ def initialize():
         db.execute('''CREATE TABLE IF NOT EXISTS sensor_samples (
             sensor_address TEXT NOT NULL, ts REAL NOT NULL, data TEXT NOT NULL,
             PRIMARY KEY (sensor_address, ts))''')
+        db.execute('''CREATE TABLE IF NOT EXISTS solar_intervals (
+            start_ts REAL PRIMARY KEY, interval_seconds INTEGER NOT NULL)''')
+        # Untagged historical collection used 60 seconds. Record changes once,
+        # separately from measurements; upgrades may import a known earlier change.
+        cadence = db.execute('SELECT interval_seconds FROM solar_intervals ORDER BY start_ts DESC LIMIT 1').fetchone()
+        if cadence is None or cadence[0] != INTERVAL:
+            db.execute('INSERT INTO solar_intervals VALUES (?, ?)', (time.time(), INTERVAL))
         row = db.execute('SELECT ts, data FROM samples ORDER BY ts DESC LIMIT 1').fetchone()
         if row:
             STATE.update(reading=json.loads(row[1]), last_attempt=row[0])
@@ -184,8 +199,19 @@ def initialize():
 def save_sensor_reading(address, reading):
     # Preserve the actual measurement time while waiting for the next batch.
     row = (address, reading['timestamp_seconds'], json.dumps(reading))
+    queue_reading('sensor', row)
+
+
+def queue_reading(source, row):
+    """Retain accepted history; keep live values updating if the buffer fills."""
     with PENDING_LOCK:
-        PENDING['sensor'].append(row)
+        if len(PENDING[source]) >= PENDING_LIMITS[source]:
+            DROPPED[source] += 1
+            if DROPPED[source] == 1:
+                logging.error('%s history buffer full; new history readings will be skipped until storage recovers', source)
+            return False
+        PENDING[source].append(row)
+        return True
 
 
 def flush_history():
@@ -218,9 +244,13 @@ def flush_history():
 
 def history_status():
     with PENDING_LOCK:
+        oldest = min((row[-2] for rows in PENDING.values() for row in rows), default=None)
         return dict(commit_interval_seconds=INTERVAL, error=HISTORY_ERROR,
                     pending_solar_samples=len(PENDING['solar']),
-                    pending_sensor_samples=len(PENDING['sensor']))
+                    pending_sensor_samples=len(PENDING['sensor']),
+                    pending_limits=dict(PENDING_LIMITS),
+                    oldest_pending_age_seconds=None if oldest is None else max(0, time.time() - oldest),
+                    dropped_solar_samples=DROPPED['solar'], dropped_sensor_samples=DROPPED['sensor'])
 
 
 def poll_once():
@@ -236,8 +266,7 @@ def poll_once():
         with LOCK:
             STATE.update(error='Controller read failed; retrying automatically.', last_attempt=attempt)
     else:
-        with PENDING_LOCK:
-            PENDING['solar'].append((attempt, json.dumps(reading)))
+        queue_reading('solar', (attempt, json.dumps(reading)))
         with LOCK:
             STATE.update(reading=reading, error=None, last_attempt=attempt)
     # Climate collection and storage retries continue even if Modbus is offline.

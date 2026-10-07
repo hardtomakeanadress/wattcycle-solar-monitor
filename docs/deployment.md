@@ -66,6 +66,19 @@ systemctl --user disable --now wattcycle-solar
 To update the checkout, stop the service, run `git pull --ff-only`, run the test
 suite, and start the service again. Back up the database before updates.
 
+### Existing five-minute history
+
+The `solar_intervals(start_ts, interval_seconds)` table records cadence changes
+without modifying stored measurements. Startup adds a change at the current
+time when no metadata exists, treating preceding records as legacy one-minute
+history. If a database already contains five-minute readings from an earlier
+version, import the **verified first five-minute sample timestamp** before
+starting the upgraded service. Do not guess it from gaps, which may be outages.
+With the service stopped and a backup made, use Python's `sqlite3` module to
+create the table if absent and insert that timestamp with interval `300`.
+Keep this metadata in backups. Cabana's verified transition was imported during
+the October 2026 fix; subsequent restarts preserve it automatically.
+
 ## Backups
 
 The default database is `dashboard/history.sqlite3` inside the checkout.
@@ -75,7 +88,7 @@ continuously. Readings are committed in one SQLite transaction per cycle,
 including pending climate readings; a normal stop flushes them, and a failed
 transaction keeps them for the next cycle. The optional climate sensor adds
 52,560 samples per year at ten-minute intervals in a second table in this same
-file; a normal SQLite backup includes both tables. Disk usage depends on the
+file; a normal SQLite backup includes both sample tables and cadence metadata. Disk usage depends on the
 stored JSON and SQLite overhead; monitor free space.
 
 The retention target is **at least five years**. The application never purges
@@ -99,6 +112,14 @@ received. Standard OS maintenance such as package jobs, log rotation, temporary
 file cleanup, and filesystem maintenance does not back up this database. Keep
 an off-device backup and check that it can be restored. No automatic solar-data
 backup, disk expansion, SD-card replacement, or recovery service is installed.
+
+Pending RAM history is bounded to 2,016 solar and 1,008 climate readings
+(seven days at their collection rates). When a source buffer is full, accepted
+readings remain queued and newer history entries are skipped until storage
+recovers; live values still update. The page shows pending counts, oldest age,
+and skipped counts since the process started, including after recovery.
+Counters and pending readings do not survive process restart. Repair storage
+promptly; the buffer is not a replacement for a working disk or backups.
 
 Make a consistent backup with Python's SQLite backup API, even while the
 dashboard is collecting. Run from the repository root:

@@ -31,7 +31,7 @@ flowchart LR
   field, load state, and raw fault bits.
 - **Five-minute collection:** one background reader regardless of browser count;
   each cycle commits pending solar and climate readings in one SQLite transaction.
-- **Long-term storage:** every successful reading is retained indefinitely,
+- **Long-term storage:** every saved reading is retained indefinitely,
   meeting a minimum five-year retention target subject to available storage.
 - **History for every measured metric:** 18 solar measurement/status charts plus optional climate history, with
   charging power, battery voltage, and solar input voltage shown by default.
@@ -146,6 +146,12 @@ can lag the live reading by about five minutes. A failed transaction keeps its
 pending readings for the next cycle and reports a storage error. A normal
 SIGTERM/Ctrl+C shutdown flushes pending readings; sudden power loss can lose
 readings since the last successful commit.
+
+During a storage failure, RAM holds up to seven days of readings: 2,016 solar
+and 1,008 climate samples. When full, it preserves queued readings and skips
+new history entries while live values continue updating. The page shows queue
+counts, the oldest pending age, and skipped counts since service startup;
+skipped counts remain visible after storage recovers.
 
 Browsers fetch cached status every five seconds and graph data every minute. Solar
 readings older than **15 minutes** are marked stale. These browser requests do not

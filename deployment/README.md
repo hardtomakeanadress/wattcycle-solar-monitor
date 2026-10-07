@@ -12,7 +12,10 @@ commits pending solar and climate readings in one SQLite transaction, including
 cycles where the controller read fails. Climate history can therefore lag its
 live reading by about five minutes. A failed transaction keeps its readings for
 retry and reports a storage error; no saved samples are deleted or rewritten.
-A normal stop flushes pending readings, while sudden power loss can lose
+A full retry buffer preserves seven days of queued readings per source and
+skips newer history entries, with visible loss counts, until storage recovers.
+Historical cadence is retained in `solar_intervals`; saved measurements are
+unchanged. A normal stop flushes pending readings, while sudden power loss can lose
 readings since the last successful commit. On restart, the latest committed
 readings are restored and collection waits out the remaining polling interval.
 The rest of this inventory describes the 3 October 2026 verification.
