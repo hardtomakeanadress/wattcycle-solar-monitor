@@ -153,6 +153,12 @@ new history entries while live values continue updating. The page shows queue
 counts, the oldest pending age, and skipped counts since service startup;
 skipped counts remain visible after storage recovers.
 
+The energy card reports the controller's **solar-cycle total and peak**. This
+controller resets them with morning light, so the previous cycle remains
+visible overnight, including after midnight. The charging-power card shows
+current watts; retained energy and peak values do not mean it is charging at
+night.
+
 Browsers fetch cached status every five seconds and graph data every minute. Solar
 readings older than **15 minutes** are marked stale. These browser requests do not
 trigger additional serial reads.

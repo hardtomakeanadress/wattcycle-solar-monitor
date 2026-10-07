@@ -27,7 +27,7 @@
 <div class="card primary"><div class="label">CHARGING POWER</div><div class="value"><span id="charge_W">—</span><span class="unit">W</span></div><small id="charge_status">Waiting for controller</small></div>
 <div class="card"><div class="label">BATTERY VOLTAGE</div><div class="value"><span id="battery_V">—</span><span class="unit">V</span></div><small><span id="controller_estimated_SOC_percent">—</span>% · controller estimate</small></div>
 <div class="card"><div class="label">SOLAR INPUT</div><div class="value"><span id="PV_V">—</span><span class="unit">V</span></div><small>Charge current <span id="charge_A">—</span> A</small></div>
-<div class="card"><div class="label">GENERATED TODAY</div><div class="value"><span id="today_generation_Wh">—</span><span class="unit">Wh</span></div><small>Peak <span id="today_peak_W">—</span> W today</small></div>
+<div class="card"><div class="label">SOLAR CYCLE ENERGY</div><div class="value"><span id="today_generation_Wh">—</span><span class="unit">Wh</span></div><small>Cycle peak <span id="today_peak_W">—</span> W<br>Resets with morning light; retained overnight.</small></div>
 </section>
 <section class="panel history-panel" aria-label="Measurement history">
 <div class="charthead"><h2>Explore your history</h2><small>Solar: 5 min · Climate: 10 min</small></div>
@@ -50,7 +50,7 @@
 <p id="history-coverage" class="history-note"></p>
 <div id="charts" class="charts"></div>
 <p class="history-note">Move across or tap a chart to inspect the nearest reading. Earlier and Later move by one window. Latest follows incoming readings at the current zoom. Times use your browser’s local timezone. Solar readings are collected every 5 minutes and climate readings every 10 minutes. Older solar history keeps its original one-minute detail; all readings are plotted at their actual times. Zoom cannot reveal measurements between readings. Climate history may take about 5 minutes to appear after a live reading.</p>
-<p class="history-note">Solar input is panel voltage; charging power is the controller’s output to the battery. Daily energy counters reset each day. Long ranges show representative readings, so brief peaks and state changes may be omitted. All saved readings, including older minute readings, stay in storage.</p>
+<p class="history-note">Solar input is panel voltage; charging power is the controller’s output to the battery. The controller’s solar-cycle energy and peak reset with morning light and remain visible overnight, including after midnight. Long ranges show representative readings, so brief peaks and state changes may be omitted. All saved readings, including older minute readings, stay in storage.</p>
 </section>
 <div class="panels"><section class="panel"><h2>Controller status</h2><div class="row"><span>Charge stage</span><strong id="stage">—</strong></div><div class="row"><span>Controller temperature</span><strong id="temp">—</strong></div><div class="row"><span>Battery temperature field</span><strong id="batterytemp">—</strong></div><div class="row"><span>DC load</span><strong id="load">—</strong></div><div class="row"><span>Faults</span><strong id="faults">—</strong></div></section></div>
 <section class="panel system-panel" aria-labelledby="system-title">

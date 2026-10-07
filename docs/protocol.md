@@ -50,6 +50,15 @@ establish exact chemistry or validate charging setpoints.
 The cumulative energy words have not been independently tested for rollover
 or word order, so the application does not present a decoded lifetime total.
 
+On the deployed controller, the generated-energy and peak-power counters at
+`010B` and `010A` reset with morning light, not at local midnight. Saved readings
+on 3–6 October 2026 show resets around 06:49–06:58 while PV voltage rises to
+12–13 V. They retain the previous solar-cycle totals overnight even while
+charging power and PV voltage are zero. The historical JSON keys beginning
+`today_` remain unchanged for compatibility; display labels use controller
+cycles rather than calendar-day totals. The exact internal reset algorithm is
+not established by these observations.
+
 ## Example verified exchange
 
 Read nominal system voltage, register `0x0100`, count 1:

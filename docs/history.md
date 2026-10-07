@@ -58,8 +58,13 @@ physical metrics. Cumulative energy words remain undecoded because their word
 order and rollover have not been independently verified.
 
 Solar input is **voltage**, not measured panel current or panel watts. Charging
-power is output toward the battery. The daily Wh counters reset each day; their
-plots are counters, not period totals. Battery percentage is the controller's
+power is output toward the battery. The controller's generation and peak
+counters were observed resetting with morning light, around 06:49–06:58 local
+time on 3–6 October 2026, rather than at midnight. Their previous solar-cycle
+totals remain visible overnight. The card and chart labels therefore describe
+controller cycles; the legacy `today_generation_Wh` / `today_peak_W` API keys
+are preserved for compatibility. These plots are counters, not calendar-period
+totals. Battery percentage is the controller's
 estimate, and a temperature-field value does not prove an external sensor exists.
 
 ## Display sampling
