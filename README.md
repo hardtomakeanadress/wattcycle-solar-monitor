@@ -147,7 +147,7 @@ ssh alex@YOUR_PI_IP 'python3 ~/WattCycle-RS485/dashboard/load_control.py off'
 
 The command runs immediately without restarting monitoring or waiting for the
 five-minute poll. An in-progress telemetry read finishes first (reader timeout:
-15 seconds). Normal switching is expected to take about 1–2 seconds on the Pi,
+15 seconds). Normal switching is expected to take about 2–3 seconds on the Pi,
 plus SSH connection time. The JSON response reports the verified telemetry and
 elapsed time; the dashboard displays the fresh state on its next five-second
 refresh. Explicit `on`/`off` commands are idempotent, not toggles.
@@ -169,6 +169,12 @@ SSH provides remote authentication. There is no HTTP write endpoint or extra
 network port, and no additional runtime package is required. Successful command
 readbacks are saved as additional history samples. This is manual LOAD control;
 temperature automation and charging inhibition are not implemented.
+
+Deployment check on 16 October 2026: confirming the already-OFF state took
+1.617 seconds inside the service (2.094 seconds including the local client).
+The monitoring PID stayed unchanged, and readback showed 0 V / 0 A / 0 W with
+no faults. This check did not energize the output; state-changing commands add
+a one-second settling check before verification.
 
 ### Environment
 

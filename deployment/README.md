@@ -24,6 +24,11 @@ The rest of this inventory describes the 3 October 2026 verification.
 
 ### Manual LOAD operation
 
+Added on 16 October 2026. All 84 Python tests passed locally and on the staged
+Pi candidate. After deployment, an OFF request confirmed the already-OFF output
+in 1.617 seconds without changing the monitor PID. All records in the consistent
+pre-deployment backup were preserved; solar/climate polling remains 300/600 s.
+
 The monitoring service includes a private local control socket. Run this as the
 service user through SSH; substitute `on` to enable LOAD:
 
