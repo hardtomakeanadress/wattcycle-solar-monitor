@@ -1,6 +1,7 @@
 # Hardware, USB adapter, and RJ12 wiring
 
-Updated 14 September 2026. The tested controller returns model `M-2430N` and
+Updated 16 October 2026; controller/wiring findings date from 14 September 2026.
+The tested controller returns model `M-2430N` and
 communicates through a CH340-based USB/RS485 adapter on Raspberry Pi Linux.
 The owner supplied the adapter product link and confirmed the published
 controller pinout. No physical cable inspection was performed remotely.

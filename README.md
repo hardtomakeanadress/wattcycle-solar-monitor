@@ -208,8 +208,12 @@ pending readings for the next cycle and reports a storage error. A normal
 SIGTERM/Ctrl+C shutdown flushes pending readings; sudden power loss can lose
 readings since the last successful commit.
 
-During a storage failure, RAM holds up to seven days of readings: 2,016 solar
-and 1,008 climate samples. When full, it preserves queued readings and skips
+Manual LOAD commands and heating controller checks also save their telemetry
+readbacks and flush pending history; these can add readings between scheduled cycles.
+
+During a storage failure, RAM holds up to **10,080 readings per source**. This
+capacity allows seven days at one reading per minute; it does not set the polling
+interval. When full, it preserves queued readings and skips
 new history entries while live values continue updating. The page shows queue
 counts, the oldest pending age, and skipped counts since service startup;
 skipped counts remain visible after storage recovers.
@@ -236,10 +240,13 @@ and credentials are excluded. Host statistics are not saved to the history DB.
 For an optional Xiaomi LYWSD03MMC sensor, set `BLUETOOTH_SENSOR_ADDRESS` in the
 service environment and restart the dashboard. Bluetooth must be powered on
 and unblocked, with `gatttool` and `stdbuf` already available on the host.
-A separate thread connects briefly every **10 minutes**, discovers the measurement
+A separate thread connects briefly every **10 minutes while heating is disarmed**
+or **5 minutes while armed**, discovers the measurement
 and notification handles by UUID, and disconnects after the first valid reading.
 Sensor timeouts cannot block the solar collector. The last successful reading
 remains visible with a warning on failure; after **30 minutes** it is stale.
+Heating uses a stricter **390-second** age limit and trips OFF on sensor errors;
+arming requests a fresh measurement within 90 seconds. See [heating](docs/heating.md).
 Each successful sensor reading is cached immediately and queued for the next
 five-minute transaction, then saved in `sensor_samples` inside the same SQLite
 database as solar history with its own timestamp, sensor address, temperature,
@@ -251,7 +258,8 @@ connection until its ten-minute interval has elapsed. Battery voltage
 is shown directly; no charge percentage is inferred. Payload format reference:
 [MiTemperature2](https://github.com/JsBergbau/MiTemperature2).
 
-The dashboard has no login or TLS and is intended for a trusted LAN or private
+Telemetry has no login, and the server has no TLS. Heating controls require a
+private control key. The dashboard is intended for a trusted LAN or private
 VPN. For remote use, access that network through a VPN or add an authenticated
 reverse proxy. Do not expose port 8080 directly to the public internet.
 
@@ -276,7 +284,8 @@ free space. Five-minute solar collection produces about 105,120 samples per
 non-leap year. The older one-minute database measured about 852 bytes per stored
 sample; using that figure as an estimate, a five-year solar history is roughly
 **0.45 GB**, with climate samples and OS, application, and backup copies adding
-more. Growth varies with reading size and database overhead. This is a capacity
+more. Additional LOAD/heating readbacks increase storage beyond this baseline.
+Growth varies with reading size and database overhead. This is a capacity
 estimate, not a guarantee against card failure.
 
 Battery percentage is the controller's estimate, not a BMS or shunt measurement.

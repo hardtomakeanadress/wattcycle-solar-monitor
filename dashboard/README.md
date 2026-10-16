@@ -11,17 +11,21 @@ reading by about five minutes. A failed transaction keeps its pending readings
 for the next cycle and reports a storage error. Browser requests return cached
 readings; opening more tabs does not create more Modbus pollers. The serial
 connection is released between readings.
+The integrated LOAD control path shares serial ownership with collection; command
+readbacks and heating controller checks also save telemetry and flush pending history.
 
-RAM retry buffers hold at most 2,016 solar and 1,008 climate readings (seven
-days per source). A full buffer keeps accepted readings and skips new history
-entries while live values keep updating. `/api/status.history` exposes
+RAM retry buffers hold at most 10,080 readings per source (seven days at one
+reading per minute; this is capacity, not polling frequency). A full buffer keeps
+accepted readings and skips new history entries while live values keep updating.
+`/api/status.history` exposes
 `pending_limits`, `oldest_pending_age_seconds`, and `dropped_solar_samples` /
 `dropped_sensor_samples` alongside pending counts. The page displays storage
 warnings and keeps loss counts visible after recovery. Counts cover the
 current process lifetime; they reset on restart.
 
 When `BLUETOOTH_SENSOR_ADDRESS` is configured, `bluetooth_sensor.py` runs a
-separate ten-minute collector using the existing BlueZ command-line tools.
+separate collector using the existing BlueZ command-line tools: every ten minutes
+while heating is disarmed, or every five minutes while armed.
 `/api/status` includes a `sensor` object with its own reading, error, age, and
 staleness. Unconfigured installations hide the climate panel. Bluetooth reads
 do not touch the serial adapter. Each successful read is cached immediately and
@@ -30,6 +34,9 @@ transaction. Storage failures keep the live reading and show an error; the
 pending reading is retried on the next cycle. Climate readings become stale
 after 30 minutes. A restart restores the latest committed reading and waits for
 the remainder of its ten-minute interval before connecting again.
+Heating requires a fresh reading on arming, uses a stricter 390-second stale
+limit, and trips OFF on sensor errors. The supervisor checks cached state every
+second without extra Bluetooth reads. See [heating behavior](../docs/heating.md).
 
 The database retains all samples indefinitely. Its tables are:
 
@@ -65,13 +72,22 @@ guide before upgrading a database already collected at five-minute intervals.
 | `GET /api/history` | Legacy: last 24 hours, charge watts and battery volts, five-minute buckets |
 | `GET /api/history/range?start=…&end=…` | Selected Unix time range, metric definitions, all measured scalar fields, storage/coverage metadata |
 | `GET /api/history/range?range=all` | All saved dates using bounded display sampling |
+| `POST /api/heating` | Authenticated arm/disarm request; 202 means accepted, status confirms the result |
+
+`load_control.py` serves manual SSH requests through the monitoring process's
+private Unix socket. `heating.py` supervises temperature, output ownership and
+latched alarms. Heating is installation-locked by default and never automatically
+re-arms after restart. Its private key and recovery metadata live beside the
+database and must remain outside Git. Telemetry GET endpoints do not require a
+login; control POST requests require the key. The HTTP server does not provide TLS.
 
 The page offers presets and custom date ranges, with an overview, individual
 metric selection, and all-metric mode. The range API selects the last timestamp
 per display bucket in SQLite before loading JSON, returning at most 1,000
 readings per source. It never loads years of raw JSON into memory at once. The timestamp
 primary-key indexes support range filtering. Sensor series use their own
-`sensor_rows` array and ten-minute cadence;
+`sensor_rows` array and actual measurement timestamps (the metric's gap-display
+cadence remains the ten-minute baseline);
 cached sensor values are never duplicated into solar records.
 The graph's display sampling does not expire or alter stored records. Retention
 is indefinite, meeting the requested minimum of five years while storage is

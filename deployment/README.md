@@ -1,5 +1,27 @@
 # Cabana Raspberry Pi installation
 
+## Current runtime — 16 October 2026
+
+Runtime commit `ab2df65` is deployed. Heating remains installation-locked and
+disarmed; LOAD was verified OFF after deployment, with no LOAD commands sent by
+that rollout. Bluetooth reads run every **five minutes while armed**, or **ten
+minutes while disarmed**. The heating stale limit is 390 seconds; arming requires
+a fresh sample within 90 seconds. Normal solar collection remains five minutes.
+
+The compact panel provides **Arm**, **Turn off**, **Unlock controls** and **Guide**;
+operating rules, owner-confirmed battery/heater details and manufacturer references
+are in [heating documentation](../docs/heating.md). No Pi runtime dependencies
+were added. Monitoring starts after reboot; heating never automatically re-arms.
+
+All 105 Python tests passed locally and on the staged Pi candidate, and frontend
+and desktop/mobile browser checks passed. [GitHub CI for this release](https://github.com/hardtomakeanadress/wattcycle-solar-monitor/actions/runs/38950973010)
+passed. Heating behavior was tested with simulated hardware; the heater is not installed.
+
+The current runtime includes `dashboard/load_control.py` and `dashboard/heating.py`.
+The inventory below records earlier snapshots, not the complete current source tree.
+
+## Historical inventory
+
 Verified on **3 October 2026**. One custom running application provides the solar
 dashboard and Bluetooth climate collection in the same Python process. Other
 application directories on the Pi contain older rollout snapshots. The
@@ -140,7 +162,8 @@ using the [documented variables](../README.md#configuration).
 
 Reauthenticate Tailscale with the owner's account on the replacement Pi. Do not
 copy authentication keys or Tailscale state into this repository. The dashboard
-has no login or TLS; keep port 8080 on a trusted network/VPN without public router
+has unauthenticated telemetry and no TLS; heating controls require a private key.
+Keep port 8080 on a trusted network/VPN without public router
 port forwarding.
 
 ## Updates, data and recovery

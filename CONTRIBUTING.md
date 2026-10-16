@@ -9,8 +9,11 @@ relaxing the reader's model check. RS485 and Modbus support alone do not imply
 that two controllers share addresses or scaling.
 
 Keep the runtime dependent only on Python's standard library. Preserve
-read-only controller access, single-reader serial ownership, visible failure
-states, and indefinite retention of existing samples.
+read-only telemetry collection, single-owner serial access, visible failure
+states, and indefinite retention of existing samples. The only verified controller
+write is manual LOAD ON/OFF through the integrated control path; do not broaden
+register writes without source evidence and agreement. Heating tests must use
+simulated hardware and leave heating installation-locked on the real Pi.
 
 Before submitting a pull request:
 

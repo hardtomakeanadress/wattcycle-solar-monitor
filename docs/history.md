@@ -7,6 +7,8 @@ the next cycle and reports a storage error; no saved samples are deleted or
 rewritten. Retention is indefinite: the requested five-year minimum does not
 introduce a five-year deletion cutoff. Older readings remain available as long
 as the storage remains usable. Backups are described in [deployment](deployment.md#backups).
+Manual LOAD commands and heating controller checks also save telemetry readbacks
+and flush pending history between scheduled cycles.
 
 ## Using the page
 
@@ -29,8 +31,10 @@ Short views use hour/minute labels and vertical time grid lines, with fewer
 labels on narrow phone screens. The full selected dates and timezone appear
 above the charts, including when a window crosses midnight or a clock change.
 Zoom changes only the displayed time window. The collector still reads solar
-every five minutes and the optional climate sensor every ten minutes; there are
-no measurements between those saved readings.
+every five minutes and the optional climate sensor every ten minutes while heating
+is disarmed, or every five minutes while armed. Arming requests a fresh sensor
+reading; control operations can add controller readbacks. The chart shows only
+saved measurements. Additional chart instructions are collapsed on the page.
 
 The page shows the earliest/latest saved dates, the number of readings in the
 selected period, displayed-point count, display interval, database size, and
@@ -46,7 +50,7 @@ this feature is enabled and is not backfilled from old solar records.
 | --- | --- |
 | Charging | Power (W), current (A), charge stage |
 | Battery | Voltage (V), controller-estimated percentage, battery-temperature field (°C) |
-| Solar | Input voltage (V), generated energy today (Wh), peak charging power today (W) |
+| Solar | Input voltage (V), generated energy per controller cycle (Wh), peak charging power per controller cycle (W) |
 | Controller | Temperature (°C), raw fault bits, nominal system voltage, operating days |
 | Load | Voltage (V), current (A), power (W), energy today (Wh), on/off state |
 | Optional climate sensor | Temperature (°C), relative humidity (%) |
@@ -71,9 +75,9 @@ estimate, and a temperature-field value does not prove an external sensor exists
 
 Queries return at most 1,000 points per source, taking the last reading from
 each bucket. The interval grows with the selected range (minimum 60 seconds
-for solar and 600 seconds for climate; the 60-second minimum preserves older
-one-minute history, though new solar measurements arrive only every five
-minutes). Climate charts use only actual sensor
+for both solar and climate). This display minimum preserves older one-minute
+history and additional control readings; it does not set collection frequency.
+Climate charts use only actual sensor
 measurements and timestamps; solar records do not repeat cached values. Full
 original records remain unchanged. Broad ranges can miss brief peaks or state
 changes; the displayed min/max apply only to the returned readings. Choose a
@@ -118,7 +122,9 @@ The JSON object contains:
   among the selected display rows, not a count of all damaged records in storage.
 - Solar metrics include `poll_interval_seconds: 300`. Climate metrics have
   `source: "sensor"` and `poll_interval_seconds: 600`; their rows are in
-  `sensor_rows`, not the solar `rows` array.
+  `sensor_rows`, not the solar `rows` array. The climate metric interval is baseline
+  gap-display metadata, not the active sensor schedule: `/api/status.sensor`
+  reports the current interval, which becomes 300 seconds while heating is armed.
 - `sampling`: description of the display selection method.
 
 `charge_status` becomes an index into the supplied state labels; `load_on`

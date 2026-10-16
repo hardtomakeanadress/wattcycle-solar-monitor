@@ -27,8 +27,9 @@ DASHBOARD_BIND=0.0.0.0
 ```
 
 Choose the bind address for the intended clients. `0.0.0.0` preserves LAN and
-VPN access but listens on every IPv4 interface; the dashboard has no login or
-TLS, and reachable clients can read telemetry and host information. For VPN-only
+VPN access but listens on every IPv4 interface; telemetry has no login and the
+server has no TLS. Reachable clients can read telemetry and host information;
+heating controls require a private key. For VPN-only
 access, set `DASHBOARD_BIND` to the Pi's own Tailscale IPv4 address (shown by
 `tailscale ip -4`). That address must exist when the service starts. For a local
 authenticated reverse proxy or SSH tunnel, use `127.0.0.1`. Binding to a specific
@@ -54,6 +55,9 @@ Verify with `loginctl show-user "$USER" -p Linger`; the value should be `yes`.
 The service restarts after an unexpected process failure. Serial read errors are
 retried during the next scheduled cycle, five minutes later, without restarting
 the service.
+Heating never re-arms automatically after a reboot or service restart. Saved
+heater ownership triggers an OFF recovery attempt and a latched alarm. Keep
+`HEATING_INSTALLATION_READY` unset until commissioning; see [heating](heating.md).
 
 ## Maintenance
 
@@ -75,6 +79,11 @@ systemctl --user disable --now wattcycle-solar
 
 To update the checkout, stop the service, run `git pull --ff-only`, run the test
 suite, and start the service again. Back up the database before updates.
+These Git instructions apply to a checkout. Cabana's deployed directory is a
+staged runtime copy, not a Git checkout: stage and test the release separately,
+back up the running files/database, and preserve service configuration, history,
+the control key and heating recovery metadata when replacing application files.
+Documentation-only changes do not require a service restart.
 
 ### Existing five-minute history
 
@@ -97,8 +106,10 @@ five minutes: about 105,120 samples per non-leap year if collection runs
 continuously. Readings are committed in one SQLite transaction per cycle,
 including pending climate readings; a normal stop flushes them, and a failed
 transaction keeps them for the next cycle. The optional climate sensor adds
-52,560 samples per year at ten-minute intervals in a second table in this same
-file; a normal SQLite backup includes both sample tables and cadence metadata. Disk usage depends on the
+52,560 samples per year at ten-minute intervals, or 105,120 at the armed
+five-minute interval, in a second table in this same file. LOAD/heating controller
+checks add readbacks and can flush pending history between cycles. A normal SQLite
+backup includes both sample tables and cadence metadata. Disk usage depends on the
 stored JSON and SQLite overhead; monitor free space.
 
 The retention target is **at least five years**. The application never purges
@@ -123,13 +134,21 @@ file cleanup, and filesystem maintenance does not back up this database. Keep
 an off-device backup and check that it can be restored. No automatic solar-data
 backup, disk expansion, SD-card replacement, or recovery service is installed.
 
-Pending RAM history is bounded to 2,016 solar and 1,008 climate readings
-(seven days at their collection rates). When a source buffer is full, accepted
+Pending RAM history is bounded to 10,080 readings per source
+(seven days at one reading per minute, independent of the actual polling rate).
+When a source buffer is full, accepted
 readings remain queued and newer history entries are skipped until storage
 recovers; live values still update. The page shows pending counts, oldest age,
 and skipped counts since the process started, including after recovery.
 Counters and pending readings do not survive process restart. Repair storage
 promptly; the buffer is not a replacement for a working disk or backups.
+
+The private `heating-control.key` and `heating-state.json` beside the database
+are separate from a SQLite backup. Preserve them during code updates and keep
+private backups outside Git. Do not overwrite current heating recovery metadata
+with an older copy during rollback: it may be needed to turn LOAD off. After a
+disaster restore, keep heating installation-locked and verify the physical LOAD
+state before commissioning again.
 
 Make a consistent backup with Python's SQLite backup API, even while the
 dashboard is collecting. Run from the repository root:

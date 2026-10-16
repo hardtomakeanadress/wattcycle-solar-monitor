@@ -1,6 +1,6 @@
 # Battery enclosure heating
 
-The dashboard has **Arm heating** and **Disable & turn LOAD off** controls.
+The dashboard has **Arm** and **Turn off** controls in the **Battery heating** panel.
 The Pi runs the thermostat locally after arming; a browser does not need to stay
 open. The current installation is **locked and disabled**, as requested by the
 owner on 16 October 2026: the bulbs and enclosure sensor installation are not ready.
@@ -32,6 +32,8 @@ does not interrupt solar charging and does not report charging as safe.
 
 The owner requested five-minute heating measurements to conserve the Bluetooth
 sensor battery. Do not shorten this interval without agreement.
+Keep the panel compact: show mode, LOAD state, thresholds and alarms; keep the
+control-key field under **Unlock controls** and detailed guidance behind **Guide**.
 
 ## Initial software behavior
 
@@ -96,8 +98,9 @@ Heating ownership/alarm metadata is atomically saved in `heating-state.json`
 beside the database before any ON command. Startup uses this to request OFF after
 an interrupted heating session. The armed state is never replayed. Normal climate
 polling returns to 600 s when disarmed; normal solar polling remains 300 s.
-Extra heating samples are retained in history. Pending buffers accommodate seven
-days at one sample per minute per source, with existing drop/error reporting.
+Extra heating samples are retained in history. Pending buffers hold 10,080 readings
+per source (seven days at one sample per minute), with existing drop/error reporting.
+This buffer capacity does not change the five-minute heating measurement interval.
 
 ## Physical limits
 
