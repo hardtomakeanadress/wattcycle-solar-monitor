@@ -22,6 +22,24 @@ The rest of this inventory describes the 3 October 2026 verification.
 
 ## Verified host
 
+### Manual LOAD operation
+
+The monitoring service includes a private local control socket. Run this as the
+service user through SSH; substitute `on` to enable LOAD:
+
+```sh
+python3 ~/WattCycle-RS485/dashboard/load_control.py off
+```
+
+For routine requests, use this client directly. Do not stop/restart the service,
+run a separate serial script, or change load mode. The response includes verified
+state and elapsed time; a failed response means state is unconfirmed and must not
+be retried automatically. The service serializes commands with telemetry and
+rejects overlapping commands. HTTP access remains read-only. See the
+[control behavior and constraints](../README.md#manual-load-onoff).
+
+### Host inventory
+
 | Item | Observed configuration |
 | --- | --- |
 | Board | Raspberry Pi 2 Model B Rev 1.1 |

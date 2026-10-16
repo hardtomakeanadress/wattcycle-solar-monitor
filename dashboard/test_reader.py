@@ -95,7 +95,7 @@ class ReaderTest(unittest.TestCase):
                 reader.read_registers(7, 0x100, 1)
         read.assert_not_called()
 
-    def run_main(self, replies, traffic=False):
+    def run_main(self, replies, traffic=False, load=None):
         attrs = [0, 0, 0, 0, 0, 0, [0] * 32]
         with patch.object(reader.os, 'open', return_value=7), patch.object(reader.os, 'close'), \
                 patch.object(reader.fcntl, 'flock'), patch.object(reader.fcntl, 'ioctl'), \
@@ -105,7 +105,7 @@ class ReaderTest(unittest.TestCase):
                 patch.object(reader, 'read_registers', side_effect=replies) as read, \
                 patch.object(sys, 'stdout', new_callable=io.StringIO) as output:
             try:
-                reader.main()
+                reader.main(load)
             finally:
                 self.requests = read.call_args_list
         return json.loads(output.getvalue())
@@ -145,6 +145,76 @@ class ReaderTest(unittest.TestCase):
     def test_temperature_sign_magnitude_boundaries(self):
         for raw, expected in [(0, 0), (127, 127), (128, 0), (129, -1), (255, -127)]:
             self.assertEqual(reader.temperature(raw), expected)
+
+    def test_load_write_echo_fragmentation_and_exact_register(self):
+        for enabled in (False, True):
+            frame = struct.pack('>BBHH', reader.SLAVE, 6, 0x120, int(enabled))
+            frame += reader.crc(frame)
+            with patch.object(reader.os, 'write', return_value=8) as write, \
+                    patch.object(reader.os, 'read', side_effect=[BlockingIOError(), frame[:3], frame[3:]]), \
+                    patch.object(reader.termios, 'tcdrain'), patch.object(reader.time, 'sleep'), \
+                    patch.object(reader.select, 'select', return_value=([7], [], [])):
+                reader.write_load(7, enabled)
+                write.assert_called_once_with(7, frame)
+
+    def test_load_invalid_reply_never_retried(self):
+        for raw in (b'\x01\x86\x02', b'\x02\x06\x01\x20\x00\x01', b'\x01\x06\x01\x20\x00\x00'):
+            with patch.object(reader.os, 'write', return_value=8) as write, \
+                    patch.object(reader.os, 'read', return_value=raw + reader.crc(raw)), \
+                    patch.object(reader.termios, 'tcdrain'), patch.object(reader.time, 'sleep'), \
+                    patch.object(reader.select, 'select', return_value=([7], [], [])):
+                with self.assertRaisesRegex(RuntimeError, 'state unconfirmed'):
+                    reader.write_load(7, True)
+                self.assertEqual(write.call_count, 1)
+
+    def test_load_timeout_short_write_and_disconnect_never_retried(self):
+        with patch.object(reader.os, 'write', return_value=8) as write, \
+                patch.object(reader.termios, 'tcdrain'), patch.object(reader.time, 'sleep'), \
+                patch.object(reader.time, 'monotonic', side_effect=[0, .1, .2, 3]), \
+                patch.object(reader.select, 'select', return_value=([], [], [])):
+            with self.assertRaisesRegex(RuntimeError, 'state unconfirmed'):
+                reader.write_load(7, False)
+            self.assertEqual(write.call_count, 1)
+        for written, received in ((7, b''), (8, b''), (8, b'12345678')):
+            with patch.object(reader.os, 'write', return_value=written) as write, \
+                    patch.object(reader.os, 'read', return_value=received), \
+                    patch.object(reader.termios, 'tcdrain'), patch.object(reader.time, 'sleep'), \
+                    patch.object(reader.select, 'select', return_value=([7], [], [])):
+                with self.assertRaisesRegex(RuntimeError, 'state unconfirmed'):
+                    reader.write_load(7, True)
+                self.assertEqual(write.call_count, 1)
+
+    def test_load_mode_fault_guards_idempotency_and_readback(self):
+        off = [0] * 18
+        on = off.copy()
+        on[13] = 0x100
+        for enabled, before, replies, error, writes in [
+                (True, off, [[0]], 'manual mode', 0),
+                (True, off[:14] + [1, 0, 0, 0], [[15]], 'faults', 0),
+                (True, off, [[15], off], 'does not match', 1),
+                (False, on, [[15], off, [0]], 'mode changed', 1),
+                (True, off, [[15], on, [15]], None, 1),
+                (False, on, [[15], off, [15]], None, 1),
+                (False, off, [[15], off, [15]], None, 0)]:
+            with patch.object(reader, 'read_registers', side_effect=replies), \
+                    patch.object(reader, 'write_load') as write, patch.object(reader.time, 'sleep'):
+                if error:
+                    with self.assertRaisesRegex(RuntimeError, error):
+                        reader.set_load(7, enabled, before)
+                else:
+                    result = reader.set_load(7, enabled, before)
+                    self.assertEqual(bool(result[13] >> 8), enabled)
+                self.assertEqual(write.call_count, writes)
+
+    def test_load_main_returns_fresh_complete_telemetry(self):
+        model = list(struct.unpack('>8H', b'M-2430N         '))
+        before, after = [0] * 18, [0] * 18
+        after[13], after[6], after[8] = 0x100, 265, 4
+        with patch.object(reader, 'write_load') as write, patch.object(reader.time, 'sleep'):
+            result = self.run_main([model, [1, 2], before, [1, 24, 3], [15], after, [15]], load='on')
+        write.assert_called_once_with(7, True)
+        self.assertTrue(result['load_on'])
+        self.assertEqual((result['load_V'], result['load_W']), (26.5, 4))
 
     def test_invalid_slave_rejected_before_device_open(self):
         for value in ('0', '248', '-1', 'abc'):

@@ -203,7 +203,8 @@ def read():
 server.SENSOR.read = read
 raise SystemExit(server.main())
 '''
-        env = dict(os.environ, SOLAR_DATABASE=str(server.DB), DASHBOARD_BIND='127.0.0.1', DASHBOARD_PORT='0')
+        env = dict(os.environ, SOLAR_DATABASE=str(server.DB), DASHBOARD_BIND='127.0.0.1', DASHBOARD_PORT='0',
+                   XDG_RUNTIME_DIR=str(server.DB.parent))
         process = subprocess.Popen([sys.executable, '-u', '-c', code], env=env,
                                    cwd=Path(server.__file__).parent,
                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)

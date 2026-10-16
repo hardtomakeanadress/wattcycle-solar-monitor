@@ -155,6 +155,7 @@ class HTTPTest(unittest.TestCase):
 
     def test_shutdown_without_sensor_and_failed_final_flush(self):
         with patch.object(server, 'initialize'), patch.object(server, 'SENSOR', bluetooth_sensor.XiaomiSensor()), \
+                patch.object(server, 'ControlServer') as control, \
                 patch.object(server, 'ThreadingHTTPServer') as http, \
                 patch.object(server.threading, 'Thread') as thread, \
                 patch.object(server.signal, 'signal'), \
@@ -164,3 +165,4 @@ class HTTPTest(unittest.TestCase):
             thread.return_value.start.assert_called_once()
             thread.return_value.join.assert_called_once()
             http.return_value.server_close.assert_called_once()
+            control.return_value.close.assert_called_once()

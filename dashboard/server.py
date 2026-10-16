@@ -18,6 +18,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlsplit
 from bluetooth_sensor import XiaomiSensor, INTERVAL as SENSOR_INTERVAL
 from system_info import SystemInfo
+from load_control import ControlServer
 
 ROOT = Path(__file__).resolve().parent
 READER = ROOT.parent / 'read_controller.py'
@@ -26,6 +27,8 @@ SYSTEM = SystemInfo(DB.parent)
 INTERVAL = 300
 STALE_AFTER = INTERVAL * 3
 LOCK = threading.Lock()
+SERIAL_LOCK = threading.Lock()
+COMMAND_LOCK = threading.Lock()
 STATE = {'reading': None, 'error': None, 'last_attempt': None}
 STOP = threading.Event()
 PENDING_LOCK = threading.Lock()
@@ -309,6 +312,13 @@ def history_status():
 
 
 def poll_once():
+    with SERIAL_LOCK:
+        poll_controller()
+    # Climate collection and storage retries continue even if Modbus is offline.
+    flush_history()
+
+
+def poll_controller():
     attempt = time.time()
     try:
         result = subprocess.run([sys.executable, str(READER)], capture_output=True,
@@ -324,8 +334,47 @@ def poll_once():
         queue_reading('solar', (attempt, json.dumps(reading)))
         with LOCK:
             STATE.update(reading=reading, error=None, last_attempt=attempt)
-    # Climate collection and storage retries continue even if Modbus is offline.
+
+
+def control_load(enabled):
+    # Reject overlapping commands rather than queueing a switch for later.
+    if not COMMAND_LOCK.acquire(blocking=False):
+        raise RuntimeError('Another LOAD command is in progress; no command sent')
+    try:
+        return run_load_command(enabled)
+    finally:
+        COMMAND_LOCK.release()
+
+
+def run_load_command(enabled):
+    # Commands run immediately, or after the current bounded telemetry request.
+    # Keep readback and cache publication inside the same lock to preserve order.
+    if not SERIAL_LOCK.acquire(timeout=20):
+        raise RuntimeError('Controller busy; no command sent')
+    try:
+        if STOP.is_set():
+            raise RuntimeError('Monitoring is shutting down; no command sent')
+        try:
+            result = subprocess.run([sys.executable, str(READER), '--load', 'on' if enabled else 'off'],
+                                    capture_output=True, text=True, timeout=15, check=True)
+            reading = json.loads(result.stdout)
+            if reading.get('load_on') is not enabled:
+                raise RuntimeError('LOAD state not verified')
+        except Exception as exc:
+            logging.error('LOAD command failed: %s', getattr(exc, 'stderr', None) or exc)
+            with LOCK:
+                STATE['error'] = 'LOAD command failed; physical state unconfirmed. Awaiting fresh telemetry.'
+            detail = (exc.stderr or '').strip().splitlines()[-1:] if isinstance(exc, subprocess.CalledProcessError) else [str(exc)]
+            raise RuntimeError('LOAD command failed; state unconfirmed; no automatic retry. ' + ' '.join(detail)) from exc
+        attempt = time.time()
+        queue_reading('solar', (attempt, json.dumps(reading)))
+        with LOCK:
+            STATE.update(reading=reading, error=None, last_attempt=attempt)
+        logging.info('LOAD %s verified', 'ON' if enabled else 'OFF')
+    finally:
+        SERIAL_LOCK.release()
     flush_history()
+    return reading
 
 
 def poll_loop():
@@ -422,7 +471,12 @@ def main():
     signal.signal(signal.SIGTERM, stop)
     collector = threading.Thread(target=poll_loop, daemon=True, name='solar-collector')
     sensor_thread = None
+    control = None
     try:
+        try:
+            control = ControlServer(control_load)
+        except (OSError, RuntimeError):
+            logging.exception('Local LOAD control unavailable; monitoring continues')
         collector.start()
         sensor_thread = SENSOR.start(STOP)
         logging.info('Dashboard listening on %s:%s', *server.server_address)
@@ -431,6 +485,8 @@ def main():
         pass
     finally:
         STOP.set()
+        if control is not None:
+            control.close()
         # Hardware calls have bounded timeouts; finish accepted readings before
         # flushing. systemd's normal stop timeout allows both collectors to exit.
         collector.join()

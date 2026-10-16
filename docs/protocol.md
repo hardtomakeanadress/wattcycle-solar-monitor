@@ -35,7 +35,9 @@ For the physical RJ12 connection and adapter, see [hardware and wiring](hardware
 | `010E` | Fault bits; displayed numerically without unverified bit labels |
 | `010F` | Operating days |
 | `0110–0111` | Cumulative generated Wh; reader preserves raw words |
+| `0120` | Manual LOAD command: function `0x06`, value 1 ON / 0 OFF |
 | `0201–0203` | Address, configured system voltage, battery type; reader preserves raw values |
+| `020F` | Load operating mode; verified installation uses 15 (manual) |
 
 Charge states: 0 idle, 1 open, 2 MPPT, 3 equalizing, 4 boost, 5 float,
 6 limited. Unknown state values are labeled `unknown`.
@@ -97,8 +99,17 @@ Do not substitute an SRNE register map solely because some identification
 addresses match: in this device, `0x0100` is nominal system voltage, while the
 SRNE map considered during discovery uses that location for battery percentage.
 
-The published connector pinout is now documented and owner-confirmed; see the
-hardware guide for the scope of that confirmation. No configuration-write
-behavior, charging setpoints, load switching, or firmware updates have been
-validated here. The reader issues only read requests and checks the model
-before decoding telemetry.
+The published connector pinout is documented and owner-confirmed; see the
+hardware guide for the scope of that confirmation. On 16 October 2026, manual
+LOAD ON and OFF were verified on the installed controller by valid write echoes,
+telemetry readback and the owner's physical confirmation. Mode 15 remained
+unchanged. The ON test reported approximately 26.5 V, 0.17 A and 4 W; OFF reported
+zero output voltage/current/power, with no faults. This validates the installed
+controller and that test load, not the proposed battery heater installation.
+
+The reader normally issues only function `0x03` reads. Its explicit `--load on`
+or `--load off` option additionally allows only the verified function `0x06`
+write at `0x0120`, after model, mode and fault checks. While monitoring is active,
+use the service's `dashboard/load_control.py` client to serialize access; do not
+run the standalone reader concurrently. Charging settings, charge inhibition,
+other configuration writes and firmware updates remain unvalidated.

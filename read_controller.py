@@ -1,4 +1,5 @@
-"""Read a WattCycle M-2430N solar controller over USB RS485 on Linux."""
+"""Read a WattCycle M-2430N; optionally set its manual LOAD output."""
+import argparse
 import datetime
 import fcntl
 import json
@@ -57,7 +58,50 @@ def temperature(value):
     return -(value & 127) if value & 128 else value
 
 
-def main():
+def write_load(fd, enabled):
+    """Write only the verified LOAD register, once. Never retry an uncertain write."""
+    request = struct.pack('>BBHH', SLAVE, 6, 0x0120, int(enabled))
+    request += crc(request)
+    time.sleep(0.05)
+    if os.write(fd, request) != len(request):
+        raise RuntimeError('Incomplete LOAD request; state unconfirmed')
+    termios.tcdrain(fd)
+    reply = b''
+    deadline = time.monotonic() + 2
+    while time.monotonic() < deadline:
+        if select.select([fd], [], [], max(0, deadline - time.monotonic()))[0]:
+            try:
+                chunk = os.read(fd, 4096)
+            except BlockingIOError:
+                continue
+            if not chunk:
+                raise RuntimeError('Serial adapter disconnected; LOAD state unconfirmed')
+            reply += chunk
+            if len(reply) >= (5 if reply[:2] == bytes([SLAVE, 0x86]) else 8):
+                break
+    if len(reply) < 5 or crc(reply[:-2]) != reply[-2:]:
+        raise RuntimeError('Invalid LOAD reply; state unconfirmed: ' + reply.hex())
+    if reply != request:
+        raise RuntimeError('LOAD write rejected or unexpected echo; state unconfirmed: ' + reply.hex())
+
+
+def set_load(fd, enabled, before):
+    if read_registers(fd, 0x020f, 1) != [15]:
+        raise RuntimeError('LOAD control requires existing manual mode (15); no settings changed')
+    if enabled and before[14]:
+        raise RuntimeError('Refusing LOAD ON while controller reports faults')
+    if bool(before[13] >> 8) != enabled:
+        write_load(fd, enabled)
+        time.sleep(1)
+    after = read_registers(fd, 0x0100, 18)
+    if bool(after[13] >> 8) != enabled:
+        raise RuntimeError('LOAD readback does not match command; no automatic retry')
+    if read_registers(fd, 0x020f, 1) != [15]:
+        raise RuntimeError('LOAD mode changed during command; state unconfirmed')
+    return after
+
+
+def main(load=None):
     fd = os.open(PORT, os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK)
     previous = None
     exclusive = False
@@ -81,6 +125,8 @@ def main():
         versions = read_registers(fd, 0x0014, 2)
         r = read_registers(fd, 0x0100, 18)
         settings = read_registers(fd, 0x0201, 3)
+        if load is not None:
+            r = set_load(fd, load == 'on', r)
         states = {0: 'idle', 1: 'open', 2: 'MPPT', 3: 'equalizing', 4: 'boost', 5: 'float', 6: 'limited'}
         result = {
             'timestamp_utc': datetime.datetime.now(datetime.timezone.utc).isoformat(),
@@ -112,4 +158,6 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--load', choices=('on', 'off'), help='set LOAD in manual mode; use the service client while monitoring runs')
+    main(parser.parse_args().load)

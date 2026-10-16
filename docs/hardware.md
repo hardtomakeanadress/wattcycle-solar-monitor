@@ -5,6 +5,32 @@ communicates through a CH340-based USB/RS485 adapter on Raspberry Pi Linux.
 The owner supplied the adapter product link and confirmed the published
 controller pinout. No physical cable inspection was performed remotely.
 
+## Battery enclosure and planned heating
+
+Owner-provided requirements, recorded **16 October 2026**:
+
+- The batteries are **WattCycle LiFePO4**, with a BMS that has **no Bluetooth or
+  other communication mechanism**, as confirmed by the owner. Exact battery model,
+  capacity, bank configuration, manufacturer temperature limits, and autonomous
+  BMS low-temperature charge protection have not yet been confirmed. Lack of BMS
+  communication does not establish whether autonomous cold protection exists.
+- The existing **Xiaomi LYWSD03MMC Bluetooth temperature sensor will be placed
+  inside the battery enclosure**. This is the intended placement, not a verified
+  completed installation. An enclosure-air reading does not establish cell temperature.
+- The planned heaters are **two 24 V, 75 W truck light bulbs connected in parallel**,
+  nominally 150 W combined (6.25 A total at the rated 24 V). Lamp technology,
+  startup current, mounting, and whether they are already connected to LOAD
+  remain unconfirmed. Actual consumption at the battery's charging voltage has
+  not been measured.
+- The intended behavior is local temperature-based heating and restriction of
+  battery charging when too cold, with remote control from the existing monitor.
+  This automation has not been implemented or enabled. Thresholds and failure
+  behavior require the battery specifications and a verified charge-inhibit method.
+
+Preserve these owner-provided facts in future work; do not infer a battery model,
+equate enclosure temperature with cell temperature, or assume built-in BMS cold
+protection from the LiFePO4 chemistry alone.
+
 ## Adapter used
 
 ![Optimus Digital USB-to-RS485 adapter](images/optimus-usb-rs485.jpg)

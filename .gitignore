@@ -29,6 +29,7 @@ venv/
 .idea/
 .vscode/
 node_modules/
+wattcycle-control/
 
 # Keep reference manuals in their attributed documentation folder only.
 *.pdf

@@ -1,6 +1,6 @@
 # WattCycle Solar Monitor — Raspberry Pi RS485 / Modbus dashboard
 
-A lightweight, read-only **WattCycle solar charge controller monitor** for
+A lightweight **WattCycle solar charge controller monitor** for
 **Raspberry Pi and Linux**, using a **USB RS485 adapter** and **Modbus RTU**.
 Read battery voltage, charging power, solar panel voltage, temperatures, and
 daily energy generation in a web dashboard, and keep your readings in SQLite
@@ -38,8 +38,9 @@ flowchart LR
   Browse 15 minutes, an hour, 6 hours, 24 hours, 7 days, 30 days, a year, all
   history, or custom local dates. Zoom to five-minute windows, step backward
   and forward, and inspect readings by moving across or tapping a chart.
-- **Read-only controller access:** only Modbus function `0x03`; no charging
-  setpoints or load controls are written.
+- **Fast manual LOAD control over SSH:** commands share serial access with
+  monitoring, verify the resulting state, and update the dashboard immediately.
+  The web dashboard stays read-only. No charging setpoints are written.
 - **Reliable framing:** Modbus CRC, slave ID, response length, and model checks.
 - **Failure visibility:** stale readings, serial failures, and storage failures
   are shown on the page; polling and failed storage transactions retry on the next cycle.
@@ -53,6 +54,12 @@ flowchart LR
   legacy `/api/history` endpoint.
 
 ## Hardware and compatibility
+
+The Cabana batteries are **WattCycle LiFePO4 with a non-communicating BMS**. The owner
+plans to put the existing Bluetooth sensor inside the battery enclosure and use
+**two 24 V, 75 W truck light bulbs in parallel** for heating. See
+[battery enclosure requirements](docs/hardware.md#battery-enclosure-and-planned-heating)
+for confirmed facts, outstanding specifications, and the automation's current status.
 
 | Item | Tested configuration |
 | --- | --- |
@@ -121,6 +128,49 @@ pending readings. For startup at boot, follow the
 [systemd deployment guide](docs/deployment.md).
 
 ## Configuration
+
+### Manual LOAD on/off
+
+With monitoring running, use its local command client (as the service user):
+
+```sh
+python3 dashboard/load_control.py on
+python3 dashboard/load_control.py off
+```
+
+From another computer, run the same client over SSH. For the Cabana installation:
+
+```sh
+ssh alex@YOUR_PI_IP 'python3 ~/WattCycle-RS485/dashboard/load_control.py on'
+ssh alex@YOUR_PI_IP 'python3 ~/WattCycle-RS485/dashboard/load_control.py off'
+```
+
+The command runs immediately without restarting monitoring or waiting for the
+five-minute poll. An in-progress telemetry read finishes first (reader timeout:
+15 seconds). Normal switching is expected to take about 1–2 seconds on the Pi,
+plus SSH connection time. The JSON response reports the verified telemetry and
+elapsed time; the dashboard displays the fresh state on its next five-second
+refresh. Explicit `on`/`off` commands are idempotent, not toggles.
+Overlapping commands are rejected instead of queued for a delayed switch.
+
+Only the previously verified `M-2430N` LOAD command is supported. Existing
+manual load mode (`0x020F = 15`) is required; the service never changes mode.
+ON is refused if controller faults are present. Each write requires a valid
+Modbus echo followed by matching telemetry. Failed or uncertain writes are
+reported, never automatically retried. A command already accepted by the
+service may finish even if SSH disconnects; reconnect and inspect status before
+issuing another command. No desired state is replayed on service restart.
+
+Control uses a private Unix socket under
+`$XDG_RUNTIME_DIR/wattcycle-control/control.sock` (normally `/run/user/UID`).
+If that runtime directory is unavailable, it uses `dashboard/wattcycle-control/`.
+The directory is restricted to the service user; the socket is mode `0600`.
+SSH provides remote authentication. There is no HTTP write endpoint or extra
+network port, and no additional runtime package is required. Successful command
+readbacks are saved as additional history samples. This is manual LOAD control;
+temperature automation and charging inhibition are not implemented.
+
+### Environment
 
 The [Cabana installation inventory](deployment/README.md) records the verified
 Pi hardware, installed packages, enabled services, service templates and recovery
