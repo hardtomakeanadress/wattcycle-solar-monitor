@@ -358,7 +358,7 @@ async function runFrontendTests() {
   fixture.heating = {available:true, installation_ready:false, control_configured:true, armed:false,
     phase:'disabled', message:'Installation not confirmed.', output_on:null, alarm:null, pending:false};
   fixture.sensor = {enabled:true, reading:{temperature_C:4,humidity_percent:50,battery_V:3},
-    age_seconds:0, stale:false, stale_after_seconds:1800, poll_interval_seconds:60, error:null};
+    age_seconds:0, stale:false, stale_after_seconds:1800, poll_interval_seconds:300, error:null};
   await refresh();
   $('heating-key').value = 'fixture-key'; heatingFreshness();
   assert($('heating-arm').disabled, 'Uninstalled heater can be armed');
@@ -368,7 +368,7 @@ async function runFrontendTests() {
   fixture.heating.armed = true; fixture.heating.phase = 'heating'; fixture.heating.output_on = true;
   await refresh();
   assert($('heating-output').textContent === 'ON' && $('heating-panel').classList.contains('heating-active'), 'Active heating missing');
-  fixture.sensor.age_seconds = 91;
+  fixture.sensor.age_seconds = 391;
   await refresh();
   assert($('heating-panel').classList.contains('heating-alarm'), 'Stale sensor does not alarm');
   fixture.sensor.age_seconds = 0;

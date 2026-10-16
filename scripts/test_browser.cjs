@@ -160,7 +160,7 @@ async function main() {
     const heatingFixture = await page.evaluate(()=>JSON.parse(JSON.stringify(status)));
     heatingFixture.heating = {available:true, installation_ready:true, control_configured:true,
       armed:false, pending:false, phase:'disabled', message:'Heating disabled.', alarm:null, output_on:false,
-      on_C:5, off_C:10, max_sensor_age_seconds:90};
+      on_C:5, off_C:10, max_sensor_age_seconds:390};
     heatingFixture.sensor.age_seconds = 0;
     heatingFixture.sensor.error = null;
     const commands = [];
@@ -174,6 +174,7 @@ async function main() {
       return route.fulfill({status:202,json:{heating:heatingFixture.heating}});
     });
     await page.waitForFunction(()=>status?.heating?.installation_ready);
+    await page.locator('#heating-access summary').click();
     await page.locator('#heating-key').fill('fixture-only-key');
     await page.locator('#heating-arm').click();
     await page.waitForFunction(()=>document.getElementById('heating-output').textContent==='ON');

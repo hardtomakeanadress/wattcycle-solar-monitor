@@ -69,12 +69,12 @@ class XiaomiSensor:
         self.wake = threading.Event()
 
     def set_interval(self, interval, refresh=False):
-        if interval not in (60, INTERVAL):
+        if interval not in (300, INTERVAL):
             raise ValueError('Unsupported sensor interval')
         with self.lock:
-            changed = self.interval != interval
+            faster = interval < self.interval
             self.interval = interval
-        if changed or refresh:
+        if faster or refresh:
             self.wake.set()
 
     def restore(self, reading):

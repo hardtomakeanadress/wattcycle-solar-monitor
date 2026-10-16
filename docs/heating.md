@@ -30,6 +30,9 @@ found. Enclosure air can warm much faster than eight batteries; air temperature
 does not establish that every battery's cells are safe to charge. The software
 does not interrupt solar charging and does not report charging as safe.
 
+The owner requested five-minute heating measurements to conserve the Bluetooth
+sensor battery. Do not shorten this interval without agreement.
+
 ## Initial software behavior
 
 These are commissioning defaults, **not WattCycle heater specifications**:
@@ -40,8 +43,8 @@ These are commissioning defaults, **not WattCycle heater specifications**:
 | Enclosure ≤5°C | Request LOAD ON and verify controller readback |
 | Enclosure ≥10°C | Request LOAD OFF and verify readback |
 | Between 5°C and 10°C | Retain previous heating state to avoid rapid switching |
-| While armed | Bluetooth every 60 s; each new sample also verifies controller state |
-| Temperature missing, invalid, sensor error, or >90 s old | Request OFF; latch alarm and disarm |
+| While armed | Bluetooth every 300 s; each new sample also verifies controller state |
+| Temperature missing, invalid, sensor error, or >390 s old | Request OFF; latch alarm and disarm |
 | Controller/command or history-storage error | Request OFF; latch alarm and disarm |
 | Enclosure ≥25°C, below −20°C, or above sensor control range | Request OFF; latch alarm and disarm |
 | Continuous heating reaches 30 minutes | Request OFF; inspection and manual re-arming required |
@@ -53,7 +56,9 @@ that 150 W can warm this bank within that time. Validate temperature distributio
 heater mounting, current and warm-up behavior before considering longer operation.
 Missing data and alarms never cause an automatic ON retry. A failed OFF is not
 silently retried: the page says **LOAD OFF unconfirmed** and requires intervention.
-A 1-second supervisor loop checks age and faults between readings; actual OFF
+The 390-second age limit allows the five-minute interval plus 90 seconds of grace.
+Arming still requires a new reading within 90 seconds. A 1-second supervisor loop
+checks cached age and faults without additional Bluetooth measurements; actual OFF
 delivery can also wait for the current bounded serial transaction.
 
 The page uses an amber state while heating and a red alarm with explanatory text
@@ -82,7 +87,7 @@ with permissions `0600`. On Cabana, the administrator retrieves it over SSH:
 cat ~/WattCycle-RS485/dashboard/heating-control.key
 ```
 
-Enter it in the page's **Control key** field. The page does not persist the key in
+Open **Unlock controls** and enter it in the **Control key** field. The page does not persist the key in
 browser storage, return it in status, or put it in a URL. Use the control page over
 Tailscale or trusted HTTPS; plain HTTP on an untrusted network exposes credentials.
 No new runtime dependencies or network services are introduced.
@@ -91,7 +96,7 @@ Heating ownership/alarm metadata is atomically saved in `heating-state.json`
 beside the database before any ON command. Startup uses this to request OFF after
 an interrupted heating session. The armed state is never replayed. Normal climate
 polling returns to 600 s when disarmed; normal solar polling remains 300 s.
-Extra minute samples are retained in history. Pending buffers accommodate seven
+Extra heating samples are retained in history. Pending buffers accommodate seven
 days at one sample per minute per source, with existing drop/error reporting.
 
 ## Physical limits

@@ -14,7 +14,7 @@
 @media(max-width:750px){.system-stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:24px 14px}.system-heading small{font-size:11px}.system-value{font-size:24px}}
 </style>
 <style>
-.heating-panel{margin:0 0 18px;border:1px solid #52634f}.heating-heading{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}.heating-heading h2{margin:0}.heating-state{font-weight:650;color:#d6ee9b}.heating-panel.heating-active{border-color:#e4b862;background:#302b1c}.heating-panel.heating-alarm{border:2px solid #ff7979;background:#351e20}.heating-alarm .heating-state{color:#ffaaaa}.heating-message{line-height:1.5;margin:14px 0;font-size:14px}.heating-facts{display:flex;gap:20px;flex-wrap:wrap;color:#bac8bd;font-size:13px;line-height:1.6}.heating-controls{display:flex;align-items:end;gap:10px;flex-wrap:wrap;margin:16px 0}.heating-controls label{font-size:12px;display:grid;gap:6px;max-width:100%}.heating-controls input{width:240px;max-width:100%}.heating-controls .stop-heating{background:#5b292b;color:#ffe1df;border:1px solid #a75454}.heating-note{font-size:12px;line-height:1.6;color:#b3bfb6}.heating-note a{color:#d6ee9b}.heating-error{color:#ffaaaa;font-size:13px;line-height:1.5}.heating-error:empty{display:none}
+.heating-panel{margin:0 0 18px;padding:14px 18px;border:1px solid #52634f}.heating-heading{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.heating-heading h2{margin:0;font-size:15px}.heating-state{font-size:13px;font-weight:650;color:#d6ee9b;margin-left:auto}.heating-panel.heating-active{border-color:#e4b862;background:#302b1c}.heating-panel.heating-alarm{border:2px solid #ff7979;background:#351e20}.heating-alarm .heating-state{color:#ffaaaa}.heating-message{line-height:1.4;margin:8px 0 0;font-size:13px}.heating-facts{display:flex;gap:14px;flex-wrap:wrap;color:#bac8bd;font-size:12px;line-height:1.5;margin-top:8px}.heating-controls{display:flex;align-items:center;gap:8px;margin-left:auto}.heating-controls button{padding:7px 12px;font-size:13px}.heating-controls .stop-heating{background:#5b292b;color:#ffe1df;border:1px solid #a75454}.heating-access{font-size:12px;color:#b3bfb6}.heating-access summary{cursor:pointer}.heating-access input{width:210px;max-width:100%;font-size:13px;padding:7px;margin-top:8px}.heating-facts a{color:#b3bfb6}.heating-error{color:#ffaaaa;font-size:13px;line-height:1.4;margin:8px 0 0}.heating-error:empty{display:none}@media(max-width:500px){.heating-controls{margin-left:0}.heating-state{margin-left:auto}.heating-heading{gap:8px 12px}}
 </style>
 <main>
 <header><div><div class="brand">WattCycle <span>☀</span> Solar</div><h1>A little closer to the sun.</h1><div class="sub">Your solar controller, at a glance.</div></div><div class="pill" id="connection" role="status">Connecting…</div></header>
@@ -27,13 +27,10 @@
 </section>
 <div class="warning hidden" id="warning" role="alert"></div>
 <section id="heating-panel" class="panel heating-panel" aria-labelledby="heating-title">
-<div class="heating-heading"><h2 id="heating-title">Battery enclosure heating</h2><span id="heating-state" class="heating-state" role="status">Checking…</span></div>
+<div class="heating-heading"><h2 id="heating-title">Battery heating</h2><span id="heating-state" class="heating-state" role="status">Checking…</span><div class="heating-controls"><button id="heating-arm" type="button" role="switch" aria-checked="false" onclick="setHeating(true)" disabled>Arm</button><button id="heating-disable" class="stop-heating" type="button" onclick="setHeating(false)" disabled>Turn off</button></div></div>
+<div class="heating-facts"><span>ON ≤<strong id="heating-on">5</strong>°C · OFF ≥<strong id="heating-off">10</strong>°C · 5 min</span><span>LOAD: <strong id="heating-output">Unconfirmed</strong></span><details id="heating-access" class="heating-access"><summary>Unlock controls</summary><label>Control key<br><input id="heating-key" type="password" autocomplete="off" oninput="heatingFreshness()"></label></details><a href="https://github.com/hardtomakeanadress/wattcycle-solar-monitor/blob/main/docs/heating.md" target="_blank" rel="noopener noreferrer">Guide</a></div>
 <p id="heating-message" class="heating-message" role="alert" aria-live="polite">Waiting for heating status.</p>
-<div class="heating-facts"><span>Heat ON ≤ <strong id="heating-on">5</strong>°C · OFF ≥ <strong id="heating-off">10</strong>°C</span><span>LOAD: <strong id="heating-output">Unconfirmed</strong></span><span>Initial maximum run: 30 minutes</span></div>
-<div class="heating-controls"><label>Control key<input id="heating-key" type="password" autocomplete="off" placeholder="Required to change heating mode" oninput="heatingFreshness()"></label><button id="heating-arm" type="button" role="switch" aria-checked="false" onclick="setHeating(true)" disabled>Arm heating</button><button id="heating-disable" class="stop-heating" type="button" onclick="setHeating(false)" disabled>Disable &amp; turn LOAD off</button></div>
 <p id="heating-request-error" class="heating-error" role="alert"></p>
-<p class="heating-note">Eight WattCycle 12 V / 100 Ah batteries · two planned 24 V / 75 W bulbs in parallel. This sensor measures enclosure air, not battery cells. While armed, temperature is checked every minute; faults request LOAD OFF and require manual re-arming. After a service restart, heating stays disarmed.</p>
-<details class="heating-note"><summary>Temperature guidance and control limits</summary><p>WattCycle’s <a href="https://www.wattcycle.com/pages/faqs_12v-1ooah" target="_blank" rel="noopener noreferrer">12 V 100 Ah guidance</a> gives a charging range of 0–50°C and a cold-charge cutoff below 0°C. Its <a href="https://www.wattcycle.com/pages/faqs" target="_blank" rel="noopener noreferrer">winter-storage guidance</a> recommends 0–25°C. Exact battery variant and BMS protection still need confirmation. The 5–10°C heating band is our initial software setting, not a WattCycle heater specification.</p><p>Heating does not block solar charging. Warm enclosure air cannot prove that all eight batteries are warm enough to charge. A Pi, sensor or RS485 failure can leave LOAD unconfirmed; software cannot guarantee physical shutdown. The control key is provided by the Pi administrator. Use control over Tailscale or a trusted HTTPS connection.</p></details>
 </section>
 <section class="grid" aria-label="Live measurements">
 <div class="card primary"><div class="label">CHARGING POWER</div><div class="value"><span id="charge_W">—</span><span class="unit">W</span></div><small id="charge_status">Waiting for controller</small></div>
@@ -61,8 +58,8 @@
 <div id="history-message" class="history-message" role="status">Loading history…</div>
 <p id="history-coverage" class="history-note"></p>
 <div id="charts" class="charts"></div>
-<p class="history-note">Move across or tap a chart to inspect the nearest reading. Earlier and Later move by one window. Latest follows incoming readings at the current zoom. Times use your browser’s local timezone. Solar readings are normally collected every 5 minutes and climate readings every 10 minutes; heating adds minute readings while armed. Older solar history keeps its original one-minute detail; all readings are plotted at their actual times. Zoom cannot reveal measurements between readings. Climate history may take about 5 minutes to appear after a live reading.</p>
-<p class="history-note">Solar input is panel voltage; charging power is the controller’s output to the battery. The controller’s solar-cycle energy and peak reset with morning light and remain visible overnight, including after midnight. Long ranges show representative readings, so brief peaks and state changes may be omitted. All saved readings, including older minute readings, stay in storage.</p>
+<details class="history-note"><summary>Chart help</summary><p>Move across or tap a chart to inspect the nearest reading. Earlier and Later move by one window. Latest follows incoming readings at the current zoom. Times use your browser’s local timezone. Solar readings are normally collected every 5 minutes and climate readings every 10 minutes; climate readings occur every 5 minutes while heating is armed. Older solar history keeps its original one-minute detail; all readings are plotted at their actual times. Zoom cannot reveal measurements between readings. Climate history may take about 5 minutes to appear after a live reading.</p>
+<p class="history-note">Solar input is panel voltage; charging power is the controller’s output to the battery. The controller’s solar-cycle energy and peak reset with morning light and remain visible overnight, including after midnight. Long ranges show representative readings, so brief peaks and state changes may be omitted. All saved readings, including older minute readings, stay in storage.</p></details>
 </section>
 <div class="panels"><section class="panel"><h2>Controller status</h2><div class="row"><span>Charge stage</span><strong id="stage">—</strong></div><div class="row"><span>Controller temperature</span><strong id="temp">—</strong></div><div class="row"><span>Battery temperature field</span><strong id="batterytemp">—</strong></div><div class="row"><span>DC load</span><strong id="load">—</strong></div><div class="row"><span>Faults</span><strong id="faults">—</strong></div></section></div>
 <section class="panel system-panel" aria-labelledby="system-title">
@@ -125,7 +122,7 @@ function heatingFreshness() {
   const h = status?.heating;
   const sensorAge = status?.sensor?.age_seconds == null ? Infinity : status.sensor.age_seconds + elapsed();
   const lost = !connected || elapsed() > 15;
-  const badSensor = !!h?.armed && (sensorAge > (h.max_sensor_age_seconds || 90) || !!status?.sensor?.error);
+  const badSensor = !!h?.armed && (sensorAge > (h.max_sensor_age_seconds || 390) || !!status?.sensor?.error);
   const cold = !!h?.armed && !badSensor && status?.sensor?.reading?.temperature_C <= 0;
   const alarm = lost || !!h?.alarm || badSensor || cold || !h?.available;
   $('heating-panel').classList.toggle('heating-alarm', alarm);
@@ -136,6 +133,7 @@ function heatingFreshness() {
     : badSensor ? 'Temperature is stale or failed. The Pi should request LOAD OFF; wait for confirmed output or inspect locally.'
     : cold && !h?.alarm ? `${h.message} Enclosure is at or below 0°C. Charging may be unsafe; this heater cannot block solar charging.`
     : h?.message || 'Heating control is unavailable.');
+  $('heating-message').classList.toggle('hidden', !alarm && !!h?.installation_ready && ['disabled','waiting','heating'].includes(h?.phase));
   const currentOutput = h?.owns_load || h?.armed || h?.alarm ? h.output_on : status?.reading?.load_on;
   put('heating-output', lost || status?.stale || status?.error || currentOutput == null ? 'Unconfirmed' : currentOutput ? 'ON' : 'OFF');
   put('heating-on', h?.on_C ?? 5);
@@ -143,7 +141,7 @@ function heatingFreshness() {
   const unlocked = !!$('heating-key').value.trim() && h?.control_configured && !lost && h?.available && !heatingRequestBusy;
   $('heating-arm').disabled = !unlocked || !h?.installation_ready || h?.armed || h?.pending;
   $('heating-arm').setAttribute('aria-checked', h?.armed ? 'true' : 'false');
-  put('heating-arm', !h?.installation_ready ? 'Installation pending' : h?.armed ? 'Heating armed' : h?.alarm ? 'Re-arm heating' : 'Arm heating');
+  put('heating-arm', !h?.installation_ready ? 'Installation pending' : h?.armed ? 'Armed' : h?.alarm ? 'Re-arm' : 'Arm');
   $('heating-disable').disabled = !unlocked;
 }
 
@@ -191,7 +189,7 @@ function sensorFreshness() {
   $('climate').classList.toggle('hidden', !sensor?.enabled);
   if (!sensor?.enabled) return;
   put('climate-name', sensor.name);
-  put('climate-frequency', `Xiaomi sensor · every ${sensor.poll_interval_seconds === 60 ? 'minute while heating is armed' : '10 minutes'}`);
+  put('climate-frequency', `Xiaomi sensor · every ${sensor.poll_interval_seconds === 300 ? '5 minutes' : '10 minutes'}`);
   const reading = sensor.reading;
   const age = sensor.age_seconds == null ? Infinity : sensor.age_seconds + elapsed();
   const bad = !connected || !reading || !!sensor.error || sensor.stale || age > sensor.stale_after_seconds;

@@ -27,7 +27,7 @@ class HeatingTest(unittest.TestCase):
         self.h.step()
         self.assertEqual(self.h.phase, 'arming')
         self.assertEqual(self.command.call_args.args, (False,))
-        self.sensor.set_interval.assert_called_with(60, refresh=True)
+        self.sensor.set_interval.assert_called_with(300, refresh=True)
 
     def sample_at(self, temperature, now):
         self.clock.return_value = now
@@ -84,7 +84,7 @@ class HeatingTest(unittest.TestCase):
     def test_staleness_uses_monotonic_age_not_wall_clock(self):
         self.arm()
         self.sample_at(4, 1001)
-        self.clock.return_value = 1092
+        self.clock.return_value = 1392
         with patch.object(heating.time, 'time', return_value=-999999):
             self.h.step()
         self.assertIn('stale', self.h.alarm)

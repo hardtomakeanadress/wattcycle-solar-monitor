@@ -121,9 +121,9 @@ class SensorHistoryTest(unittest.TestCase):
             self.sensor.poll_once()
         self.assertIsNone(self.sensor.snapshot()['error'])
 
-    def test_heating_wakes_recent_sensor_and_samples_each_minute(self):
+    def test_heating_wakes_recent_sensor_and_samples_every_five_minutes(self):
         self.sensor.restore(self.reading)
-        self.sensor.set_interval(60, refresh=True)
+        self.sensor.set_interval(300, refresh=True)
         with patch.object(ble.time, 'time', return_value=1000), \
              patch.object(ble.time, 'monotonic', return_value=100) as clock, \
              patch.object(self.sensor.wake, 'wait', side_effect=lambda seconds: setattr(clock, 'return_value', clock.return_value + seconds)):
@@ -136,7 +136,7 @@ class SensorHistoryTest(unittest.TestCase):
             self.sensor.poll_once = poll
             with self.assertRaises(InterruptedError):
                 self.sensor.poll_loop()
-        self.assertEqual(calls, [100, 160])
-        self.assertEqual(self.sensor.snapshot()['poll_interval_seconds'], 60)
+        self.assertEqual(calls, [100, 400])
+        self.assertEqual(self.sensor.snapshot()['poll_interval_seconds'], 300)
         self.sensor.set_interval(600)
         self.assertEqual(self.sensor.snapshot()['poll_interval_seconds'], 600)

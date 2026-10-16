@@ -8,7 +8,8 @@ import threading
 import time
 
 ON_C, OFF_C = 5.0, 10.0
-SENSOR_INTERVAL, MAX_SENSOR_AGE = 60, 90
+SENSOR_INTERVAL, MAX_SENSOR_AGE = 300, 390
+ARM_TIMEOUT = 90
 MAX_ON_SECONDS = 1800  # Initial commissioning limit; not a manufacturer value.
 
 
@@ -182,7 +183,7 @@ class Heating:
                 self.trip('Enclosure temperature timestamp is invalid.')
                 return
             if received is None or received < self.started:
-                if self.last_sample is not None or now - self.started > MAX_SENSOR_AGE:
+                if self.last_sample is not None or now - self.started > ARM_TIMEOUT:
                     self.trip('No fresh enclosure temperature received after arming.')
                 return
             if (not isinstance(received, (int, float)) or not math.isfinite(received)
@@ -204,7 +205,7 @@ class Heating:
             self.last_sample = received
             desired = temperature < OFF_C if self.output else temperature <= ON_C
             try:
-                # Each fresh minute sample verifies the controller, even without a transition.
+                # Each fresh five-minute sample verifies the controller, even without a transition.
                 self.output_command(desired)
                 self.publish(alarm=None, phase='heating' if desired else 'waiting',
                              reason='Heating enclosure.' if desired else 'Armed; enclosure is warm enough.')
