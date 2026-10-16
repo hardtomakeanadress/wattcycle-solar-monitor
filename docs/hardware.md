@@ -9,23 +9,23 @@ controller pinout. No physical cable inspection was performed remotely.
 
 Owner-provided requirements, recorded **16 October 2026**:
 
-- The batteries are **WattCycle LiFePO4**, with a BMS that has **no Bluetooth or
-  other communication mechanism**, as confirmed by the owner. Exact battery model,
-  capacity, bank configuration, manufacturer temperature limits, and autonomous
+- There are **eight WattCycle 12 V, 100 Ah LiFePO4 batteries**, with a BMS that has
+  **no Bluetooth or other communication mechanism**, as confirmed by the owner.
+  Exact variant (standard/Group 24/Mini), series/parallel bank configuration, and autonomous
   BMS low-temperature charge protection have not yet been confirmed. Lack of BMS
   communication does not establish whether autonomous cold protection exists.
 - The existing **Xiaomi LYWSD03MMC Bluetooth temperature sensor will be placed
-  inside the battery enclosure**. This is the intended placement, not a verified
-  completed installation. An enclosure-air reading does not establish cell temperature.
+  inside the battery enclosure**. The owner confirmed that installation is not
+  ready yet. An enclosure-air reading does not establish cell temperature.
 - The planned heaters are **two 24 V, 75 W truck light bulbs connected in parallel**,
   nominally 150 W combined (6.25 A total at the rated 24 V). Lamp technology,
-  startup current, mounting, and whether they are already connected to LOAD
-  remain unconfirmed. Actual consumption at the battery's charging voltage has
+  startup current and mounting remain unconfirmed. The owner confirmed the heater
+  installation is not ready yet. Actual consumption at the battery's charging voltage has
   not been measured.
 - The intended behavior is local temperature-based heating and restriction of
   battery charging when too cold, with remote control from the existing monitor.
-  This automation has not been implemented or enabled. Thresholds and failure
-  behavior require the battery specifications and a verified charge-inhibit method.
+  The [heating feature](heating.md) is implemented with an installation lock and
+  remains disabled. Charging inhibition is not implemented or verified.
 
 Preserve these owner-provided facts in future work; do not infer a battery model,
 equate enclosure temperature with cell temperature, or assume built-in BMS cold

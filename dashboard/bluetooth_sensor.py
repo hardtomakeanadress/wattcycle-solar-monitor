@@ -64,20 +64,35 @@ class XiaomiSensor:
         self.state = dict(reading=None, error=None, last_attempt=None)
         self.handles = None
         self.on_reading = on_reading
+        self.interval = INTERVAL
+        self.received_monotonic = None
+        self.wake = threading.Event()
+
+    def set_interval(self, interval, refresh=False):
+        if interval not in (60, INTERVAL):
+            raise ValueError('Unsupported sensor interval')
+        with self.lock:
+            changed = self.interval != interval
+            self.interval = interval
+        if changed or refresh:
+            self.wake.set()
 
     def restore(self, reading):
         with self.lock:
+            self.received_monotonic = None
             self.state.update(reading=reading, error=None,
                               last_attempt=reading['timestamp_seconds'] if reading else None)
 
     def snapshot(self):
         with self.lock:
             data = dict(self.state)
+            interval, received = self.interval, self.received_monotonic
         reading = data['reading']
         age = None if reading is None else max(0, time.time() - reading['timestamp_seconds'])
         return dict(data, enabled=bool(self.address), name=self.name, model='LYWSD03MMC',
                     age_seconds=age, stale=age is None or age > STALE_AFTER,
-                    stale_after_seconds=STALE_AFTER, poll_interval_seconds=INTERVAL)
+                    stale_after_seconds=STALE_AFTER, poll_interval_seconds=interval,
+                    received_monotonic=received)
 
     def discover(self):
         if not re.fullmatch(r'(?:[0-9A-F]{2}:){5}[0-9A-F]{2}', self.address):
@@ -136,12 +151,13 @@ class XiaomiSensor:
         attempt = time.time()
         try:
             reading = self.read()
+            received = time.monotonic()
         except Exception:
             logging.exception('Bluetooth sensor read failed')
             # Rediscover after a failure, including firmware/handle changes.
             self.handles = None
             with self.lock:
-                self.state.update(error='Sensor unavailable. Retrying every 10 minutes.', last_attempt=attempt)
+                self.state.update(error='Sensor unavailable. Retrying automatically.', last_attempt=attempt)
             return
         error = None
         if self.on_reading is not None:
@@ -152,20 +168,24 @@ class XiaomiSensor:
                 error = 'Live sensor reading received, but could not save history. Check storage on the Pi.'
         with self.lock:
             self.state.update(reading=reading, error=error, last_attempt=attempt)
+            self.received_monotonic = received
 
     def poll_loop(self, stop_event=None):
-        wait = stop_event.wait if stop_event is not None else time.sleep
         # A restart must not trigger another radio connection for a recent sample.
         reading = self.snapshot()['reading']
-        if reading:
-            remaining = min(INTERVAL, max(0, INTERVAL - (time.time() - reading['timestamp_seconds'])))
-            if remaining:
-                if wait(remaining):
-                    return
+        remaining = min(INTERVAL, max(0, INTERVAL - (time.time() - reading['timestamp_seconds']))) if reading else 0
+        due = time.monotonic() + remaining
         while stop_event is None or not stop_event.is_set():
-            start = time.monotonic()
-            self.poll_once()
-            wait(max(1, INTERVAL - (time.monotonic() - start)))
+            if self.wake.is_set():
+                self.wake.clear()
+                due = 0
+            if time.monotonic() >= due:
+                start = time.monotonic()
+                self.poll_once()
+                with self.lock:
+                    interval = self.interval
+                due = max(time.monotonic() + 1, start + interval)
+            self.wake.wait(min(1, max(0, due - time.monotonic())))
 
     def start(self, stop_event=None):
         if self.address:

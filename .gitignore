@@ -30,6 +30,8 @@ venv/
 .vscode/
 node_modules/
 wattcycle-control/
+heating-state.json
+heating-state.tmp
 
 # Keep reference manuals in their attributed documentation folder only.
 *.pdf

@@ -46,6 +46,10 @@ def main():
             db.executemany('INSERT INTO sensor_samples VALUES (?, ?, ?)', climate)
             db.execute('INSERT INTO solar_intervals VALUES (?, 300)', (now - 2 * 86400,))
         server.initialize()
+        # Show the real heating panel without starting any hardware supervisor.
+        server.HEATING = server.Heating(server.SENSOR, lambda _: (_ for _ in ()).throw(AssertionError('hardware')),
+                                       lambda: None, Path(folder)/'heating-state.json', ready=False)
+        server.HEATING_KEY = 'browser-fixture-key'
         http = server.ThreadingHTTPServer(('127.0.0.1', 0), server.Handler)
         thread = threading.Thread(target=http.serve_forever, kwargs={'poll_interval': .05})
         thread.start()

@@ -162,7 +162,8 @@ class BatchHistoryTest(unittest.TestCase):
                 self.assertEqual(db.execute('SELECT COUNT(*) FROM sensor_samples').fetchone()[0], 3)
 
     def test_default_capacity_is_seven_days_per_source(self):
-        self.assertEqual(server.PENDING_LIMITS, {'solar': 2016, 'sensor': 1008})
+        # Heating supervision can add one reading per minute from each source.
+        self.assertEqual(server.PENDING_LIMITS, {'solar': 10080, 'sensor': 10080})
 
     def test_restart_waits_remaining_five_minutes(self):
         with server.database() as db:

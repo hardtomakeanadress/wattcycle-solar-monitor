@@ -1,5 +1,6 @@
 // Optional browser regression test: npm install --no-save playwright
-// DASHBOARD_TEST_URL points to an existing dashboard; only GET requests are made.
+// DASHBOARD_TEST_URL points to an existing dashboard; only GET requests reach it.
+// Heating POST tests are intercepted and never reach hardware.
 // The candidate HTML is intercepted locally, so the remote installation is not changed.
 const {chromium} = require('playwright');
 const fs = require('node:fs');
@@ -155,6 +156,38 @@ async function main() {
     await page.getByRole('button',{name:'Refresh history',exact:true}).click(); await settled();
     expectedHistoryFailure = false;
     assert(await page.locator('#zoom-in').isEnabled());
+    // Test real button events and alarming with fully intercepted control traffic.
+    const heatingFixture = await page.evaluate(()=>JSON.parse(JSON.stringify(status)));
+    heatingFixture.heating = {available:true, installation_ready:true, control_configured:true,
+      armed:false, pending:false, phase:'disabled', message:'Heating disabled.', alarm:null, output_on:false,
+      on_C:5, off_C:10, max_sensor_age_seconds:90};
+    heatingFixture.sensor.age_seconds = 0;
+    heatingFixture.sensor.error = null;
+    const commands = [];
+    await page.route('**/api/status', route=>route.fulfill({json:heatingFixture}));
+    await page.route('**/api/heating', route=>{
+      assert.equal(route.request().method(),'POST');
+      assert.equal(route.request().headers().authorization,'Bearer fixture-only-key');
+      const command=route.request().postDataJSON(); commands.push(command);
+      Object.assign(heatingFixture.heating, {armed:command.armed, phase:command.armed?'heating':'disabled',
+        output_on:command.armed, message:command.armed?'Heating enclosure.':'Heating disabled; LOAD OFF verified.'});
+      return route.fulfill({status:202,json:{heating:heatingFixture.heating}});
+    });
+    await page.waitForFunction(()=>status?.heating?.installation_ready);
+    await page.locator('#heating-key').fill('fixture-only-key');
+    await page.locator('#heating-arm').click();
+    await page.waitForFunction(()=>document.getElementById('heating-output').textContent==='ON');
+    assert(await page.locator('#heating-panel').evaluate(el=>el.classList.contains('heating-active')));
+    await page.locator('#heating-disable').click();
+    await page.waitForFunction(()=>document.getElementById('heating-output').textContent==='OFF');
+    assert.deepEqual(commands,[{armed:true},{armed:false}]);
+    Object.assign(heatingFixture.heating, {phase:'alarm',alarm:'Sensor unavailable',message:'LOAD OFF unconfirmed; inspect locally.',output_on:null});
+    await page.waitForFunction(()=>document.getElementById('heating-panel').classList.contains('heating-alarm'));
+    assert.equal(await page.locator('#heating-output').textContent(),'Unconfirmed');
+    await page.locator('#heating-panel').screenshot({path:path.join(output,'heating-alarm.png')});
+    await page.setViewportSize({width:320,height:740});
+    assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+    await page.locator('#heating-panel').screenshot({path:path.join(output,'heating-mobile-320.png')});
     assert.deepEqual(errors,[]);
     console.log('PASS: live API, presets, zoom/pan/latest, minute limit, hover/tap, all metrics, custom dates, draft refresh, error recovery, desktop and mobile overflow; no page errors.');
     console.log('Screenshots: '+output);

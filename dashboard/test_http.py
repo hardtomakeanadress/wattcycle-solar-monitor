@@ -155,6 +155,7 @@ class HTTPTest(unittest.TestCase):
 
     def test_shutdown_without_sensor_and_failed_final_flush(self):
         with patch.object(server, 'initialize'), patch.object(server, 'SENSOR', bluetooth_sensor.XiaomiSensor()), \
+                patch.object(server, 'setup_heating'), patch.object(server, 'HEATING', None), \
                 patch.object(server, 'ControlServer') as control, \
                 patch.object(server, 'ThreadingHTTPServer') as http, \
                 patch.object(server.threading, 'Thread') as thread, \
@@ -166,3 +167,49 @@ class HTTPTest(unittest.TestCase):
             thread.return_value.join.assert_called_once()
             http.return_value.server_close.assert_called_once()
             control.return_value.close.assert_called_once()
+
+    def post(self, body=b'{"armed":true}', key='test-key', origin='http://cabana:8080', **headers):
+        h = object.__new__(server.Handler)
+        h.path, h.rfile, h.wfile = '/api/heating', io.BytesIO(body), io.BytesIO()
+        h.headers = {'Host':'cabana:8080', 'Origin':origin, 'Authorization':'Bearer '+key,
+                     'Content-Type':'application/json', 'Content-Length':str(len(body)), **headers}
+        h.send_response, h.send_error = Mock(), Mock()
+        h.send_header, h.end_headers = Mock(), Mock()
+        h.do_POST()
+        return h
+
+    def test_heating_auth_origin_and_payload_before_hardware_access(self):
+        with patch.object(server, 'HEATING_KEY', 'test-key'), patch.object(server, 'HEATING') as heating:
+            for kwargs, code in [({'key':'wrong'},403), ({'origin':'http://evil.invalid'},403),
+                                 ({'body':b'{"armed":1}'},400), ({'body':b'null'},400),
+                                 ({'body':b'{"armed":true,"extra":1}'},400),
+                                 ({'Content-Type':'text/plain'},400),
+                                 ({'Content-Length':'99999'},400)]:
+                h = self.post(**kwargs)
+                self.assertEqual(h.send_error.call_args.args[0], code)
+            heating.request.assert_not_called()
+
+    def test_heating_post_returns_accepted_not_assumed_physical_state(self):
+        with patch.object(server, 'HEATING_KEY', 'test-key'), patch.object(server, 'HEATING') as heating:
+            heating.snapshot.return_value = {'armed':False, 'pending':True, 'phase':'disabled'}
+            h = self.post()
+            h.send_response.assert_called_once_with(202)
+            heating.request.assert_called_once_with(True)
+            self.assertFalse(json.loads(h.wfile.getvalue())['heating']['armed'])
+            heating.request.side_effect = ValueError('Installation not confirmed')
+            self.assertEqual(self.post().send_error.call_args.args[0], 400)
+
+    def test_key_is_private_persistent_and_not_in_status(self):
+        key = server.heating_key()
+        self.assertGreaterEqual(len(key), 32)
+        self.assertEqual((server.DB.parent/'heating-control.key').stat().st_mode & 0o777, 0o600)
+        self.assertEqual(server.heating_key(), key)
+        self.assertNotIn(key, json.dumps(server.snapshot()))
+
+    def test_bad_key_does_not_prevent_shutdown_recovery(self):
+        with patch.object(server, 'HEATING'), patch.object(server, 'HEATING_KEY'), \
+                patch.object(server, 'heating_key', side_effect=ValueError), \
+                patch.object(server, 'Heating') as heating, self.assertLogs(level='ERROR'):
+            server.setup_heating()
+            heating.return_value.start.assert_called_once()
+            self.assertIsNone(server.HEATING_KEY)

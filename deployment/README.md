@@ -40,8 +40,15 @@ For routine requests, use this client directly. Do not stop/restart the service,
 run a separate serial script, or change load mode. The response includes verified
 state and elapsed time; a failed response means state is unconfirmed and must not
 be retried automatically. The service serializes commands with telemetry and
-rejects overlapping commands. HTTP access remains read-only. See the
+rejects overlapping commands. The separate heating UI uses authenticated control. See the
 [control behavior and constraints](../README.md#manual-load-onoff).
+
+### Heating installation lock
+
+The dashboard heating feature remains disabled pending the owner’s heater/sensor
+installation. `HEATING_INSTALLATION_READY` is not set. See the
+[heating operating rules and control key](../docs/heating.md). Eight 12 V / 100 Ah
+WattCycle batteries are recorded; the exact variant and bank wiring remain unconfirmed.
 
 ### Host inventory
 

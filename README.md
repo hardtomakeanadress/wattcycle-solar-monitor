@@ -40,7 +40,10 @@ flowchart LR
   and forward, and inspect readings by moving across or tapping a chart.
 - **Fast manual LOAD control over SSH:** commands share serial access with
   monitoring, verify the resulting state, and update the dashboard immediately.
-  The web dashboard stays read-only. No charging setpoints are written.
+  No charging setpoints are written.
+- **Battery enclosure heating:** authenticated dashboard arming, temperature-based
+  LOAD control and visible fault alarms. Installation is currently locked and disabled.
+  See [heating behavior and WattCycle guidance](docs/heating.md).
 - **Reliable framing:** Modbus CRC, slave ID, response length, and model checks.
 - **Failure visibility:** stale readings, serial failures, and storage failures
   are shown on the page; polling and failed storage transactions retry on the next cycle.
@@ -55,7 +58,7 @@ flowchart LR
 
 ## Hardware and compatibility
 
-The Cabana batteries are **WattCycle LiFePO4 with a non-communicating BMS**. The owner
+The Cabana bank contains **eight WattCycle 12 V, 100 Ah LiFePO4 batteries with non-communicating BMSs**. The owner
 plans to put the existing Bluetooth sensor inside the battery enclosure and use
 **two 24 V, 75 W truck light bulbs in parallel** for heating. See
 [battery enclosure requirements](docs/hardware.md#battery-enclosure-and-planned-heating)
@@ -165,10 +168,11 @@ Control uses a private Unix socket under
 `$XDG_RUNTIME_DIR/wattcycle-control/control.sock` (normally `/run/user/UID`).
 If that runtime directory is unavailable, it uses `dashboard/wattcycle-control/`.
 The directory is restricted to the service user; the socket is mode `0600`.
-SSH provides remote authentication. There is no HTTP write endpoint or extra
-network port, and no additional runtime package is required. Successful command
-readbacks are saved as additional history samples. This is manual LOAD control;
-temperature automation and charging inhibition are not implemented.
+SSH provides remote authentication for manual commands. The separate heating UI
+uses an authenticated POST endpoint on the existing dashboard port. No additional
+runtime package is required. Successful command readbacks are saved as additional
+history samples. Manual ON is blocked while heating owns LOAD; manual OFF disarms
+heating. See [automatic heating](docs/heating.md). Charging inhibition is not implemented.
 
 Deployment check on 16 October 2026: confirming the already-OFF state took
 1.617 seconds inside the service (2.094 seconds including the local client).
@@ -193,6 +197,7 @@ Configuration uses environment variables, inherited by the reader subprocess.
 | `DASHBOARD_BIND` | `0.0.0.0` | Network interface to listen on |
 | `DASHBOARD_PORT` | `8080` | HTTP port |
 | `BLUETOOTH_SENSOR_ADDRESS` | empty (disabled) | Optional LYWSD03MMC Bluetooth address |
+| `HEATING_INSTALLATION_READY` | unset / disabled | Installation lock; set to `1` only after commissioning review. Does not arm heating by itself |
 | `BLUETOOTH_SENSOR_NAME` | `Cabana climate` | Climate panel title |
 
 Solar collection occurs every **300 seconds (five minutes)**. Each cycle drains all

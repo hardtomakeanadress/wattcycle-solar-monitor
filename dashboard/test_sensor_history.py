@@ -72,7 +72,7 @@ class SensorHistoryTest(unittest.TestCase):
         self.assertEqual(data['sensor_rows'], [dict(ts=ts, sensor_temperature_C=-5, sensor_humidity_percent=0)
                                                 for ts in (1000, 1600)])
         self.assertEqual(len(data['metrics']), 20)
-        self.assertEqual(data['sensor_bucket_seconds'], 600)
+        self.assertEqual(data['sensor_bucket_seconds'], 60)
         self.assertEqual(data['available_end'], 2200)
 
     def test_sensor_query_is_bounded_and_retains_all_records(self):
@@ -88,21 +88,27 @@ class SensorHistoryTest(unittest.TestCase):
     def test_restart_waits_for_remaining_interval(self):
         self.sensor.restore(self.reading)
         with patch.object(ble.time, 'time', return_value=1120), \
-             patch.object(ble.time, 'sleep', side_effect=InterruptedError) as sleep, \
-             patch.object(self.sensor, 'poll_once') as poll:
+             patch.object(ble.time, 'monotonic', return_value=100) as clock, \
+             patch.object(self.sensor.wake, 'wait', side_effect=lambda seconds: setattr(clock, 'return_value', clock.return_value + seconds)), \
+             patch.object(self.sensor, 'poll_once', side_effect=InterruptedError) as poll:
             with self.assertRaises(InterruptedError):
                 self.sensor.poll_loop()
-        sleep.assert_called_once_with(480)
-        poll.assert_not_called()
+            self.assertEqual(clock.return_value, 580)
+        poll.assert_called_once()
 
     def test_polling_waits_ten_minutes_less_time_spent_reading(self):
-        with patch.object(ble.time, 'monotonic', side_effect=[100, 105]), \
-             patch.object(ble.time, 'sleep', side_effect=InterruptedError) as sleep, \
-             patch.object(self.sensor, 'poll_once') as poll:
+        with patch.object(ble.time, 'monotonic', return_value=100) as clock, \
+             patch.object(self.sensor.wake, 'wait', side_effect=lambda seconds: setattr(clock, 'return_value', clock.return_value + seconds)):
+            calls = []
+            def poll():
+                calls.append(clock.return_value)
+                if len(calls) == 2:
+                    raise InterruptedError
+                clock.return_value += 5
+            self.sensor.poll_once = poll
             with self.assertRaises(InterruptedError):
                 self.sensor.poll_loop()
-        sleep.assert_called_once_with(595)
-        poll.assert_called_once()
+        self.assertEqual(calls, [100, 700])
 
     def test_failed_storage_keeps_live_data_and_recovers(self):
         self.sensor.on_reading = Mock(side_effect=sqlite3.OperationalError('disk full'))
@@ -114,3 +120,23 @@ class SensorHistoryTest(unittest.TestCase):
         with patch.object(self.sensor, 'read', return_value=self.reading):
             self.sensor.poll_once()
         self.assertIsNone(self.sensor.snapshot()['error'])
+
+    def test_heating_wakes_recent_sensor_and_samples_each_minute(self):
+        self.sensor.restore(self.reading)
+        self.sensor.set_interval(60, refresh=True)
+        with patch.object(ble.time, 'time', return_value=1000), \
+             patch.object(ble.time, 'monotonic', return_value=100) as clock, \
+             patch.object(self.sensor.wake, 'wait', side_effect=lambda seconds: setattr(clock, 'return_value', clock.return_value + seconds)):
+            calls = []
+            def poll():
+                calls.append(clock.return_value)
+                if len(calls) == 2:
+                    raise InterruptedError
+                clock.return_value += 5
+            self.sensor.poll_once = poll
+            with self.assertRaises(InterruptedError):
+                self.sensor.poll_loop()
+        self.assertEqual(calls, [100, 160])
+        self.assertEqual(self.sensor.snapshot()['poll_interval_seconds'], 60)
+        self.sensor.set_interval(600)
+        self.assertEqual(self.sensor.snapshot()['poll_interval_seconds'], 600)

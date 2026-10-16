@@ -4,11 +4,13 @@ from bisect import bisect_right
 from collections import OrderedDict
 from contextlib import contextmanager
 import json
+import hmac
 import logging
 import math
 import os
 from pathlib import Path
 import signal
+import secrets
 import sqlite3
 import subprocess
 import sys
@@ -19,6 +21,7 @@ from urllib.parse import parse_qs, urlsplit
 from bluetooth_sensor import XiaomiSensor, INTERVAL as SENSOR_INTERVAL
 from system_info import SystemInfo
 from load_control import ControlServer
+from heating import Heating
 
 ROOT = Path(__file__).resolve().parent
 READER = ROOT.parent / 'read_controller.py'
@@ -29,12 +32,14 @@ STALE_AFTER = INTERVAL * 3
 LOCK = threading.Lock()
 SERIAL_LOCK = threading.Lock()
 COMMAND_LOCK = threading.Lock()
+HEATING = None
+HEATING_KEY = None
 STATE = {'reading': None, 'error': None, 'last_attempt': None}
 STOP = threading.Event()
 PENDING_LOCK = threading.Lock()
 PENDING = {'solar': [], 'sensor': []}
 # Keep accepted readings during a storage outage without exhausting Pi RAM.
-PENDING_LIMITS = {'solar': 7 * 86400 // INTERVAL, 'sensor': 7 * 86400 // SENSOR_INTERVAL}
+PENDING_LIMITS = {'solar': 7 * 86400 // 60, 'sensor': 7 * 86400 // 60}
 DROPPED = {'solar': 0, 'sensor': 0}
 HISTORY_ERROR = None
 HISTORY_CACHE = OrderedDict()
@@ -146,7 +151,7 @@ def history_range(query):
             ) picked ON s.ts = picked.ts ORDER BY s.ts
         ''', (start, end, start, bucket)).fetchall()
         count = db.execute('SELECT COUNT(*) FROM samples WHERE ts >= ? AND ts < ?', (start, end)).fetchone()[0]
-        sensor_bucket = max(SENSOR_INTERVAL, bucket)
+        sensor_bucket = max(60, bucket)
         sensor_selected = db.execute('''
             SELECT ts, data FROM sensor_samples WHERE sensor_address=? AND ts IN (
                 SELECT MAX(ts) FROM sensor_samples WHERE sensor_address=? AND ts >= ? AND ts < ?
@@ -337,6 +342,12 @@ def poll_controller():
 
 
 def control_load(enabled):
+    if HEATING is not None:
+        return HEATING.manual(enabled, execute_load)
+    return execute_load(enabled)
+
+
+def execute_load(enabled):
     # Reject overlapping commands rather than queueing a switch for later.
     if not COMMAND_LOCK.acquire(blocking=False):
         raise RuntimeError('Another LOAD command is in progress; no command sent')
@@ -405,11 +416,97 @@ def snapshot():
     data['history'] = history_status()
     data['error'] = data['error'] or data['history']['error']
     data['sensor']['error'] = data['sensor']['error'] or data['history']['error']
+    data['heating'] = heating_status()
     return data
+
+
+def heating_status():
+    data = HEATING.snapshot() if HEATING is not None else dict(available=False, armed=False,
+        installation_ready=False, phase='unavailable', alarm=None, message='Heating control is unavailable.')
+    data['control_configured'] = HEATING_KEY is not None
+    return data
+
+
+def heating_health():
+    with LOCK:
+        state = dict(STATE)
+    if state['error']:
+        return 'Controller telemetry failed. Inspect before re-arming.'
+    if (state['reading'] or {}).get('fault_bits', 0):
+        return 'Controller reports faults. Inspect before re-arming.'
+    if history_status()['error']:
+        return 'History storage failed. Inspect storage before re-arming.'
+    return None
+
+
+def setup_heating():
+    global HEATING, HEATING_KEY
+    HEATING_KEY = None
+    try:
+        HEATING_KEY = heating_key()
+    except (OSError, ValueError):
+        # Authentication failure must not prevent recovery of a previously ON heater.
+        logging.exception('Heating UI control key unavailable')
+    HEATING = Heating(SENSOR, execute_load, heating_health, DB.parent / 'heating-state.json',
+                      ready=os.environ.get('HEATING_INSTALLATION_READY') == '1')
+    HEATING.start()
+
+
+def heating_key():
+    key_path = DB.parent / 'heating-control.key'
+    try:
+        fd = os.open(key_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:
+        pass
+    else:
+        with os.fdopen(fd, 'w') as stream:
+            stream.write(secrets.token_urlsafe(32) + '\n')
+    key = key_path.read_text().strip()
+    if len(key) < 32 or not key.isascii():
+        raise ValueError('Heating control key must contain at least 32 ASCII characters')
+    return key
 
 
 class Handler(BaseHTTPRequestHandler):
     timeout = 30
+
+    def do_POST(self):
+        if self.path != '/api/heating':
+            self.send_error(404)
+            return
+        origin = self.headers.get('Origin')
+        if origin and (urlsplit(origin).scheme not in ('http', 'https') or urlsplit(origin).netloc != self.headers.get('Host')):
+            self.send_error(403, 'Cross-origin control is forbidden')
+            return
+        credential = self.headers.get('Authorization', '')
+        if HEATING_KEY is None or not hmac.compare_digest(credential.encode(), ('Bearer ' + HEATING_KEY).encode()):
+            self.send_error(403, 'A valid heating control key is required')
+            return
+        try:
+            if self.headers.get('Content-Type') != 'application/json' or self.headers.get('Transfer-Encoding'):
+                raise ValueError('Expected application/json')
+            length = int(self.headers.get('Content-Length', '0'))
+            if not 0 < length <= 128:
+                raise ValueError('Invalid request length')
+            data = json.loads(self.rfile.read(length))
+            if not isinstance(data, dict) or set(data) != {'armed'} or type(data['armed']) is not bool:
+                raise ValueError('Expected a boolean armed value')
+            if HEATING is None:
+                raise ValueError('Heating unavailable')
+            HEATING.request(data['armed'])
+        except (OSError, ValueError) as exc:
+            self.send_error(400, str(exc))
+            return
+        body = json.dumps({'heating': heating_status()}).encode()
+        self.send_response(202)
+        self.send_header('Content-Type', 'application/json')
+        self.send_header('Content-Length', str(len(body)))
+        self.send_header('Cache-Control', 'no-store')
+        self.end_headers()
+        try:
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
 
     def do_GET(self):
         try:
@@ -474,6 +571,10 @@ def main():
     control = None
     try:
         try:
+            setup_heating()
+        except (OSError, ValueError):
+            logging.exception('Heating unavailable; monitoring continues')
+        try:
             control = ControlServer(control_load)
         except (OSError, RuntimeError):
             logging.exception('Local LOAD control unavailable; monitoring continues')
@@ -484,9 +585,11 @@ def main():
     except KeyboardInterrupt:
         pass
     finally:
-        STOP.set()
         if control is not None:
             control.close()
+        if HEATING is not None:
+            HEATING.close()
+        STOP.set()
         # Hardware calls have bounded timeouts; finish accepted readings before
         # flushing. systemd's normal stop timeout allows both collectors to exit.
         collector.join()

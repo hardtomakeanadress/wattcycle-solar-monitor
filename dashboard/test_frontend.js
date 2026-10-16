@@ -4,7 +4,7 @@ const elements = new Map();
 const document = {getElementById(id) {
   if (!elements.has(id)) {
     const classes = new Set();
-    elements.set(id, {textContent: '', innerHTML: '', value: '', classList: {
+    elements.set(id, {textContent: '', innerHTML: '', value: '', setAttribute(name, value) { this[name] = value; }, classList: {
       toggle(name, enabled) { if (enabled) classes.add(name); else classes.delete(name); },
       remove(name) { classes.delete(name); },
       contains(name) { return classes.has(name); }
@@ -355,5 +355,30 @@ async function runFrontendTests() {
   await nextRefresh.callback();
   assert(requestedURL === '/api/status' && scheduled.filter(task => task.delay === 5000).length === 1,
     'Scheduled status refresh did not fetch and reschedule');
-  return 'PASS: freshness, errors, metrics, short presets, zoom/pan/follow, DST, time ticks, point inspection, date drafts, slow responses, gaps, escaping, and scheduling';
+  fixture.heating = {available:true, installation_ready:false, control_configured:true, armed:false,
+    phase:'disabled', message:'Installation not confirmed.', output_on:null, alarm:null, pending:false};
+  fixture.sensor = {enabled:true, reading:{temperature_C:4,humidity_percent:50,battery_V:3},
+    age_seconds:0, stale:false, stale_after_seconds:1800, poll_interval_seconds:60, error:null};
+  await refresh();
+  $('heating-key').value = 'fixture-key'; heatingFreshness();
+  assert($('heating-arm').disabled, 'Uninstalled heater can be armed');
+  fixture.heating.installation_ready = true;
+  await refresh();
+  assert(!$('heating-arm').disabled, 'Ready heater cannot be armed with key');
+  fixture.heating.armed = true; fixture.heating.phase = 'heating'; fixture.heating.output_on = true;
+  await refresh();
+  assert($('heating-output').textContent === 'ON' && $('heating-panel').classList.contains('heating-active'), 'Active heating missing');
+  fixture.sensor.age_seconds = 91;
+  await refresh();
+  assert($('heating-panel').classList.contains('heating-alarm'), 'Stale sensor does not alarm');
+  fixture.sensor.age_seconds = 0;
+  fixture.heating.armed = false; fixture.heating.phase = 'alarm'; fixture.heating.alarm = 'Control failed';
+  fixture.heating.message = 'LOAD OFF unconfirmed'; fixture.heating.output_on = null;
+  await refresh();
+  assert($('heating-output').textContent === 'Unconfirmed' && $('heating-panel').classList.contains('heating-alarm'), 'Unknown output shown as OFF');
+  failedFetch = true; await refresh();
+  assert($('heating-arm').disabled && $('heating-disable').disabled, 'Offline controls enabled');
+  assert($('heating-message').textContent.includes('Cannot confirm'), 'Offline alarm omitted');
+  failedFetch = false;
+  return 'PASS: heating lock, alarms, unknown output, offline controls, freshness, history, system panel and scheduling';
 }
