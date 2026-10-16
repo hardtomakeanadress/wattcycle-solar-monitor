@@ -238,8 +238,10 @@ With Node.js installed **for development only**, test the page's JavaScript:
 node scripts/test_frontend.cjs
 ```
 
-CI runs both suites. See [CONTRIBUTING.md](CONTRIBUTING.md) for hardware reports
-and changes. The deployed application itself does not use Node.js.
+CI runs both suites and a separate Playwright/Chromium browser suite against a
+temporary dashboard with synthetic history and no hardware collectors. See
+[CONTRIBUTING.md](CONTRIBUTING.md) for hardware reports and changes. The deployed
+application itself does not use Node.js or Playwright.
 
 ## License and attribution
 

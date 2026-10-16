@@ -77,6 +77,19 @@ The graph's display sampling does not expire or alter stored records. Retention
 is indefinite, meeting the requested minimum of five years while storage is
 available. See [history API details](../docs/history.md).
 
+Malformed JSON or a non-object stored value becomes a gap at its original
+timestamp. The range response includes `invalid_solar_rows` and
+`invalid_sensor_rows`, counting unreadable selected records only, and the page
+shows a warning. Original database rows and total sample counts are preserved.
+The legacy endpoint emits `null` for missing or non-finite measurements.
+An unreadable latest record cannot stop startup; the collector retries normally.
+
+HTTP idle connections time out after 30 seconds. Range responses use a bounded
+cache (eight exact queries, 30 seconds), invalidated after history commits.
+Concurrent range requests are serialized, so identical concurrent queries share
+one calculation. This does not limit arbitrary requests; retain trusted-network
+access. No range limit or change to indefinite retention is introduced.
+
 The interface keeps system sans-serif fonts, the dark green/lime palette, and
 responsive cards. Charts use a two-column desktop layout and one column on
 mobile, larger mobile axis labels, SVG point titles, and tap-to-inspect values.

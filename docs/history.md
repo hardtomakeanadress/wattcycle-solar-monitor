@@ -98,6 +98,10 @@ are returned. `range=all` cannot be combined with timestamps. Unknown,
 duplicated, empty, or invalid parameters return HTTP 400; storage/read errors
 return HTTP 503. The UI reports errors and retries automatically.
 
+Identical query strings reuse a response for up to 30 seconds, with at most
+eight cached responses; successful history commits invalidate the cache.
+Different date bounds use separate entries. All ranges remain available.
+
 The JSON object contains:
 
 - `start`, `end`, `bucket_seconds`, `sample_count` for the selected range.
@@ -110,6 +114,8 @@ The JSON object contains:
 - `sensor_rows`: separate actual sensor timestamps and `sensor_temperature_C` /
   `sensor_humidity_percent` values for the configured sensor address.
 - `sensor_sample_count`, `sensor_bucket_seconds`: independent sensor sampling statistics.
+- `invalid_solar_rows`, `invalid_sensor_rows`: unreadable JSON/non-object records
+  among the selected display rows, not a count of all damaged records in storage.
 - Solar metrics include `poll_interval_seconds: 300`. Climate metrics have
   `source: "sensor"` and `poll_interval_seconds: 600`; their rows are in
   `sensor_rows`, not the solar `rows` array.
@@ -119,7 +125,15 @@ The JSON object contains:
 becomes 0/1. Unknown states and missing/non-finite fields become null. Full
 original JSON, including textual states, remains in SQLite.
 
+An unreadable record becomes a row of null measurements at its original timestamp,
+breaking the plotted line. Other selected readings remain available, the page
+reports the count, and no stored record is rewritten or deleted. Sample counts
+still include those records. Missing individual fields are also null but are not
+counted as unreadable records.
+
 The legacy `/api/history` endpoint still returns its original 24-hour array of
 five-minute representative readings with `charge_W` and `battery_V`. Existing
 clients can keep using it; the updated page uses the range API. Neither endpoint
 triggers a serial read or writes/deletes database rows.
+The legacy endpoint also uses null for missing/non-finite measurements and
+unreadable records, preserving its array response format.

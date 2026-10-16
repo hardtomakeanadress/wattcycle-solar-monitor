@@ -33,6 +33,23 @@ recent saved data and checks desktop/mobile layout, chart navigation, date
 editing, point inspection, and recovery from a simulated HTTP failure.
 Set `TEST_DEPLOYED=1` to test the server's actual HTML instead of the local candidate.
 
+CI also runs `python3 scripts/test_browser_ci.py`. This wrapper creates a temporary
+SQLite database with two days of synthetic solar/climate history, starts only
+the HTTP server on loopback, and runs the browser script against the actual
+checkout HTML. It never starts serial or Bluetooth collectors. `/api/system`
+measures the CI host; the test accepts non-Pi machines. The wrapper removes the
+temporary database and stops the server on completion or failure.
+
+To run that isolated check locally, provide Playwright 1.62.1 and Chromium in a
+separate development environment, expose its modules through `NODE_PATH`, and
+run `python3 scripts/test_browser_ci.py`. `NODE_BINARY` can select a Node executable;
+`CHROME_PATH` can select an existing Chrome/Chromium installation. CI installs
+these development tools only on its runner. Browser console errors fail the test,
+except the deliberately injected history HTTP 503 response. The unit-style
+frontend harness checks the exact startup block before removing it; real page
+startup and automatic scheduling are exercised separately by the browser and
+frontend tests.
+
 Do not attach credentials, private network addresses, or full production databases.
 For reference manuals and product photographs, record the public source, retrieval
 date, and scope in [third-party references](docs/third-party.md). Keep manuals in

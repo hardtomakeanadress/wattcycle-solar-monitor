@@ -19,9 +19,17 @@ async function main() {
     const page = await context.newPage();
     page.setDefaultTimeout(20000);
     const errors = [];
+    let expectedHistoryFailure = false;
+    const checkConsole = message => {
+      if (message.type() !== 'error') return;
+      if (expectedHistoryFailure && message.location().url.includes('/api/history/range') && message.text().includes('503')) return;
+      errors.push(message.text());
+    };
+    // Browsers may request an icon even though the dashboard declares none.
+    await context.route('**/favicon.ico', route => route.fulfill({status:204}));
     page.on('pageerror',error=>{errors.push(error.message); console.error('Page error:',error.message);});
     page.on('requestfailed',request=>console.error('Request failed:',request.url(),request.failure()));
-    page.on('console',message=>{if(message.type()==='error') console.error('Browser console:',message.text());});
+    page.on('console', checkConsole);
     await page.goto(url);
     await page.waitForFunction(()=>document.querySelectorAll('.metric-chart svg').length===3);
     await page.screenshot({path:path.join(output,'before-desktop.png'),fullPage:true});
@@ -44,7 +52,7 @@ async function main() {
     assert.equal(await page.locator('#range').inputValue(),'86400');
     assert.equal(await page.locator('.metric-chart svg').count(),3);
     await page.waitForFunction(()=>!!systemData && systemConnected);
-    assert((await page.locator('#system-model').textContent()).includes('Raspberry Pi'));
+    assert.equal(await page.locator('#system-model').textContent(), await page.evaluate(()=>systemData.model || 'Monitor computer'));
     assert.equal(await page.locator('.system-details, #system-flags').count(),0);
     assert(!(await page.locator('#system-temperature').textContent()).includes('NaN'));
     await page.locator('.system-panel').screenshot({path:path.join(output,'system-desktop.png')});
@@ -109,9 +117,10 @@ async function main() {
     // Check real touch input and overflow at small phone sizes.
     const phone = await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true,deviceScaleFactor:1,timezoneId:'Europe/Bucharest'});
     const mobile = await phone.newPage();
+    await phone.route('**/favicon.ico', route => route.fulfill({status:204}));
     mobile.on('pageerror',error=>errors.push(error.message));
     mobile.on('requestfailed',request=>console.error('Mobile request failed:',request.url(),request.failure()));
-    mobile.on('console',message=>{if(message.type()==='error') console.error('Mobile console:',message.text());});
+    mobile.on('console', checkConsole);
     if (!process.env.TEST_DEPLOYED) {
       await mobile.route(url,route=>route.fulfill({contentType:'text/html',body:candidate}));
       await mobile.route('**/api/**',async route=>route.fulfill({response:await route.fetch()}));
@@ -137,12 +146,14 @@ async function main() {
     await mobile.locator('.system-panel').screenshot({path:path.join(output,'system-mobile-320.png')});
     await mobile.screenshot({path:path.join(output,'after-mobile-320.png'),fullPage:true});
     // Failed history requests disable navigation, then recover on the next refresh.
+    expectedHistoryFailure = true;
     await page.route('**/api/history/range?*',route=>route.fulfill({status:503,body:'Test outage'}));
     await page.getByRole('button',{name:'Refresh history',exact:true}).click();
     await page.waitForFunction(()=>document.getElementById('history-message').textContent.includes('unavailable'));
     assert(await page.locator('#zoom-in').isDisabled());
     await page.unroute('**/api/history/range?*');
     await page.getByRole('button',{name:'Refresh history',exact:true}).click(); await settled();
+    expectedHistoryFailure = false;
     assert(await page.locator('#zoom-in').isEnabled());
     assert.deepEqual(errors,[]);
     console.log('PASS: live API, presets, zoom/pan/latest, minute limit, hover/tap, all metrics, custom dates, draft refresh, error recovery, desktop and mobile overflow; no page errors.');

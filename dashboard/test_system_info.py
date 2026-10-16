@@ -2,6 +2,7 @@ import io
 import json
 from pathlib import Path
 import subprocess
+import tempfile
 from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
@@ -111,6 +112,23 @@ class SystemInfoTest(unittest.TestCase):
             handler.do_GET()
         handler.send_response.assert_called_once_with(200)
         self.assertEqual(json.loads(handler.wfile.getvalue())['temperature_C'], 34.7)
+
+
+class ReadTextTest(unittest.TestCase):
+    def test_real_files_strip_padding_preserve_lines_and_handle_failures(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'source'
+            for raw, expected in [(b'\x00 Pi model \n\x00', 'Pi model'),
+                                  (b'MemTotal: 100 kB\nMemAvailable: 70 kB\n', 'MemTotal: 100 kB\nMemAvailable: 70 kB'),
+                                  (b'172861.1 680000.0\n', '172861.1 680000.0')]:
+                path.write_bytes(raw)
+                self.assertEqual(system.read_text(path), expected)
+            path.write_bytes(b'\xff')
+            self.assertEqual(system.read_text(path), '')
+            self.assertEqual(system.read_text(Path(tmp) / 'missing'), '')
+            self.assertEqual(system.read_text(Path(tmp)), '')
+            with patch.object(Path, 'read_text', side_effect=PermissionError):
+                self.assertEqual(system.read_text(path), '')
 
 
 class ThrottleTest(unittest.TestCase):

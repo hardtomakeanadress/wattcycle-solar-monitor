@@ -5,6 +5,13 @@ retain their respective owners' rights; the project's MIT license does not
 apply to the PDFs or retailer photograph. Original sources are listed below.
 The wiring SVG is an original project illustration of the documented signals.
 
+No explicit redistribution grant is recorded for the bundled PDFs or retailer
+photograph. Attribution does not grant permission. The maintainer will remove
+these copies on request from the rights holder; please contact the maintainer
+through this repository's issue tracker. Source URLs, retrieval dates, and
+section/page references are retained in text so the guides remain usable if a
+copy is removed. This notice does not change the rights attached to the files.
+
 ## Manuals
 
 | Local file | Source / scope | Retrieved |

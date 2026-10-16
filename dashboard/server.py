@@ -1,6 +1,7 @@
 """Small standard-library dashboard. One serial reader; browsers use cached data."""
 import datetime
 from bisect import bisect_right
+from collections import OrderedDict
 from contextlib import contextmanager
 import json
 import logging
@@ -33,6 +34,10 @@ PENDING = {'solar': [], 'sensor': []}
 PENDING_LIMITS = {'solar': 7 * 86400 // INTERVAL, 'sensor': 7 * 86400 // SENSOR_INTERVAL}
 DROPPED = {'solar': 0, 'sensor': 0}
 HISTORY_ERROR = None
+HISTORY_CACHE = OrderedDict()
+HISTORY_CACHE_LOCK = threading.Lock()
+HISTORY_CACHE_SECONDS = 30
+HISTORY_CACHE_LIMIT = 8
 SENSOR = XiaomiSensor(os.environ.get('BLUETOOTH_SENSOR_ADDRESS', ''),
                      os.environ.get('BLUETOOTH_SENSOR_NAME', 'Cabana climate'))
 
@@ -65,6 +70,37 @@ SENSOR_METRICS = [('sensor_temperature_C', 'Climate temperature', '°C'),
 
 class InvalidRange(ValueError):
     pass
+
+
+def stored_reading(raw):
+    """An unreadable record is a gap, never a reason to rewrite history."""
+    try:
+        reading = json.loads(raw)
+    except (ValueError, TypeError, UnicodeError):
+        return None
+    return reading if isinstance(reading, dict) else None
+
+
+def clear_history_cache():
+    with HISTORY_CACHE_LOCK:
+        HISTORY_CACHE.clear()
+
+
+def history_response(query):
+    # Serialize concurrent queries and bound retained responses on the Pi.
+    # Failed queries are not cached. Commits invalidate all cached ranges.
+    key = (str(DB), SENSOR.address, query)
+    with HISTORY_CACHE_LOCK:
+        cached = HISTORY_CACHE.get(key)
+        if cached is not None and time.monotonic() - cached[0] < HISTORY_CACHE_SECONDS:
+            HISTORY_CACHE.move_to_end(key)
+            return cached[1]
+        body = json.dumps(history_range(query)).encode()
+        HISTORY_CACHE[key] = (time.monotonic(), body)
+        HISTORY_CACHE.move_to_end(key)
+        while len(HISTORY_CACHE) > HISTORY_CACHE_LIMIT:
+            HISTORY_CACHE.popitem(last=False)
+        return body
 
 
 def history_range(query):
@@ -117,9 +153,13 @@ def history_range(query):
         sensor_count = db.execute('SELECT COUNT(*) FROM sensor_samples WHERE sensor_address=? AND ts >= ? AND ts < ?',
                                   (SENSOR.address, start, end)).fetchone()[0]
     rows = []
+    invalid_solar_rows = invalid_sensor_rows = 0
     cadence_starts = [change[0] for change in cadence]
     for ts, raw in selected:
-        reading = json.loads(raw)
+        reading = stored_reading(raw)
+        if reading is None:
+            invalid_solar_rows += 1
+            reading = {}
         change = bisect_right(cadence_starts, ts) - 1
         row = {'ts': ts, 'poll_interval_seconds': cadence[change][1] if change >= 0 else 60}
         for key, _, _ in METRICS:
@@ -132,7 +172,10 @@ def history_range(query):
         rows.append(row)
     sensor_rows = []
     for ts, raw in sensor_selected:
-        reading = json.loads(raw)
+        reading = stored_reading(raw)
+        if reading is None:
+            invalid_sensor_rows += 1
+            reading = {}
         row = {'ts': ts}
         for key, _, _ in SENSOR_METRICS:
             value = reading.get(key.removeprefix('sensor_'))
@@ -140,6 +183,7 @@ def history_range(query):
         sensor_rows.append(row)
     disk = os.statvfs(DB.parent)
     return dict(start=start, end=end, bucket_seconds=bucket, sample_count=count,
+                invalid_solar_rows=invalid_solar_rows, invalid_sensor_rows=invalid_sensor_rows,
                 sensor_rows=sensor_rows, sensor_sample_count=sensor_count,
                 sensor_bucket_seconds=sensor_bucket,
                 storage=dict(database_bytes=DB.stat().st_size,
@@ -169,6 +213,7 @@ def database():
 
 def initialize():
     global HISTORY_ERROR
+    clear_history_cache()
     with PENDING_LOCK:
         PENDING['solar'].clear()
         PENDING['sensor'].clear()
@@ -188,12 +233,21 @@ def initialize():
         if cadence is None or cadence[0] != INTERVAL:
             db.execute('INSERT INTO solar_intervals VALUES (?, ?)', (time.time(), INTERVAL))
         row = db.execute('SELECT ts, data FROM samples ORDER BY ts DESC LIMIT 1').fetchone()
-        if row:
-            STATE.update(reading=json.loads(row[1]), last_attempt=row[0])
+        reading = stored_reading(row[1]) if row else None
+        if row and reading is None:
+            logging.error('Latest solar history record is unreadable at timestamp %s', row[0])
+        STATE.update(reading=reading, last_attempt=row[0] if reading is not None else None)
         sensor_row = db.execute('SELECT data FROM sensor_samples WHERE sensor_address=? ORDER BY ts DESC LIMIT 1',
                                 (SENSOR.address,)).fetchone()
     SENSOR.on_reading = save_sensor_reading
-    SENSOR.restore(json.loads(sensor_row[0]) if sensor_row else None)
+    sensor_reading = stored_reading(sensor_row[0]) if sensor_row else None
+    if sensor_reading is not None:
+        ts = sensor_reading.get('timestamp_seconds')
+        if not isinstance(ts, (int, float)) or not math.isfinite(ts):
+            sensor_reading = None
+    if sensor_row and sensor_reading is None:
+        logging.error('Latest climate history record is unreadable; retrying the sensor')
+    SENSOR.restore(sensor_reading)
 
 
 def save_sensor_reading(address, reading):
@@ -237,6 +291,7 @@ def flush_history():
         PENDING['solar'].clear()
         PENDING['sensor'].clear()
         HISTORY_ERROR = None
+        clear_history_cache()
         if duplicates:
             logging.error('Skipped %s duplicate history timestamps; existing readings preserved', duplicates)
         return True
@@ -290,7 +345,11 @@ def snapshot():
     with LOCK:
         data = dict(STATE)
     reading = data['reading']
-    age = None if reading is None else max(0, time.time() - datetime.datetime.fromisoformat(reading['timestamp_utc']).timestamp())
+    try:
+        age = None if reading is None else max(0, time.time() - datetime.datetime.fromisoformat(reading['timestamp_utc']).timestamp())
+    except (KeyError, TypeError, ValueError, OverflowError, OSError):
+        age = None
+        data['error'] = data['error'] or 'Saved reading has an invalid timestamp; waiting for a fresh controller reading.'
     data.update(age_seconds=age, stale=age is None or age > STALE_AFTER, server_time_seconds=time.time(),
                 stale_after_seconds=STALE_AFTER, poll_interval_seconds=INTERVAL)
     data['sensor'] = SENSOR.snapshot()
@@ -301,6 +360,8 @@ def snapshot():
 
 
 class Handler(BaseHTTPRequestHandler):
+    timeout = 30
+
     def do_GET(self):
         try:
             self.respond()
@@ -322,15 +383,18 @@ class Handler(BaseHTTPRequestHandler):
         elif route == '/api/system':
             body, kind = json.dumps(SYSTEM.snapshot()).encode(), 'application/json'
         elif route == '/api/history/range':
-            body, kind = json.dumps(history_range(url.query)).encode(), 'application/json'
+            body, kind = history_response(url.query), 'application/json'
         elif route == '/api/history':
             with database() as db:
                 rows = db.execute('SELECT ts, data FROM samples WHERE ts >= ? ORDER BY ts', (time.time() - 86400,)).fetchall()
             # Five-minute buckets keep the browser payload small on the Pi 2.
             buckets = {}
             for ts, raw in rows:
-                r = json.loads(raw)
-                buckets[int(ts // 300)] = {'ts': ts, 'charge_W': r['charge_W'], 'battery_V': r['battery_V']}
+                r = stored_reading(raw) or {}
+                values = {key: r.get(key) for key in ('charge_W', 'battery_V')}
+                buckets[int(ts // 300)] = dict(ts=ts, **{
+                    key: value if isinstance(value, (int, float)) and math.isfinite(value) else None
+                    for key, value in values.items()})
             body, kind = json.dumps(list(buckets.values())).encode(), 'application/json'
         else:
             self.send_error(404)

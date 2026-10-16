@@ -386,7 +386,8 @@ async function loadHistory(automatic = false) {
     const selection = $('metric').value || 'overview';
     $('metric').innerHTML = '<option value="overview">Overview: charging, battery &amp; solar</option><option value="all">Every metric</option>' + data.metrics.map(m => `<option value="${escapeHTML(m.key)}">${escapeHTML(m.label)}</option>`).join('');
     $('metric').value = selection;
-    put('history-message', data.sample_count || data.sensor_sample_count ? '' : 'No readings saved in this date range.');
+    const damaged = (data.invalid_solar_rows || 0) + (data.invalid_sensor_rows || 0);
+    put('history-message', damaged ? `${number(damaged)} selected stored readings could not be read and are shown as gaps. Original records are preserved; check the database backup.` : data.sample_count || data.sensor_sample_count ? '' : 'No readings saved in this date range.');
     const coverage = data.available_start == null ? 'No saved history yet.' : `Saved history: ${new Date(data.available_start*1000).toLocaleString()} – ${new Date(data.available_end*1000).toLocaleString()}.`;
     const storage = data.storage ? ` Database ${(data.storage.database_bytes/1e6).toFixed(1)} MB · ${(data.storage.free_bytes/1e9).toFixed(1)} GB free.` : '';
     const climate = data.metrics.some(m => m.source === 'sensor') ? ` Climate: ${number(data.sensor_sample_count || 0)} readings; ${(data.sensor_rows || []).length} displayed (last per ${number(data.sensor_bucket_seconds/60)} min).` : '';

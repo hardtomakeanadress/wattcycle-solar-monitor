@@ -14,6 +14,7 @@ const document = {getElementById(id) {
 }};
 let monotonicNow = 0, failedFetch = false, pendingFetch = null;
 const performance = {now: () => monotonicNow};
+const window = {innerWidth:1280};
 const scheduled = [];
 function setTimeout(callback, delay) { scheduled.push({callback, delay}); return scheduled.length; }
 function clearTimeout() {}
@@ -161,6 +162,15 @@ async function runFrontendTests() {
   assert($('history-message').textContent === '', 'Single reading incorrectly called empty');
   assert($('charts').innerHTML.includes('<circle'), 'Single reading invisible');
   assert($('charts').innerHTML.includes('Battery voltage') && $('charts').innerHTML.includes('Solar input voltage'), 'Overview missing metrics');
+  historyFixture.invalid_solar_rows = 1;
+  historyFixture.invalid_sensor_rows = 2;
+  await history();
+  assert($('history-message').textContent.includes('3 selected stored readings') &&
+    $('history-message').textContent.includes('preserved'), 'Unreadable history warning missing');
+  delete historyFixture.invalid_solar_rows;
+  delete historyFixture.invalid_sensor_rows;
+  await history();
+  assert($('history-message').textContent === '', 'Unreadable history warning did not clear');
   assert(requestedURL.includes('end='+fixture.server_time_seconds), 'Query uses wrong browser clock');
   $('metric').value = 'all';
   renderHistory();
@@ -179,6 +189,11 @@ async function runFrontendTests() {
   });
   assert((solarSVG.match(/M[0-9]/g)||[]).length === 2 && solarSVG.includes('L'),
     'Five-minute solar readings broken apart, or outage joined by a line');
+  const damagedSVG = chart({...metric,poll_interval_seconds:300}, {
+    ...historyFixture,start:0,end:1000,bucket_seconds:60,
+    rows:[{ts:100,controller_C:20},{ts:400,controller_C:null},{ts:700,controller_C:22}]
+  });
+  assert((damagedSVG.match(/M[0-9]/g)||[]).length === 2, 'Unreadable record joined by a line');
   const mixedSVG = chart({...metric,poll_interval_seconds:300}, {
     start:0,end:2500,bucket_seconds:60,
     rows:[{ts:0,controller_C:20,poll_interval_seconds:60},
@@ -246,6 +261,10 @@ async function runFrontendTests() {
   assert(timeTicks(tickStart,tickStart+30*86400).length >= 2, 'Month view has too few time labels');
   assert(/^\d\d:\d\d$/.test(timeLabel(tickStart,900)), 'Short view does not show clear hours and minutes');
   assert(chart(metric,{...historyFixture,...oneHour,rows:[{ts:oneHour.start+60,controller_C:0}]}).includes('time-grid'), 'Time grid is missing');
+  window.innerWidth = 390;
+  const mobileChart = chart(metric,{...historyFixture,start:tickStart,end:tickStart+900,rows:[{ts:tickStart+60,controller_C:0}]});
+  assert((mobileChart.match(/class="time-grid"/g)||[]).length <= 4, 'Narrow chart ignores mobile time ticks');
+  window.innerWidth = 1280;
   const inspectRows = [{ts:100,charge_W:0},{ts:160,charge_W:null},{ts:220,charge_W:10}];
   assert(nearestReading(inspectRows,'charge_W',150).ts === 100, 'Nearest reading loses zero or selects missing value');
   assert(nearestReading(inspectRows,'charge_W',219).ts === 220, 'Nearest reading inspection misses data');
@@ -331,5 +350,10 @@ async function runFrontendTests() {
   await request;
   pendingFetch = null;
   assert(scheduled.filter(task => task.delay === 5000).length === 1, 'Refresh did not reschedule');
+  const nextRefresh = scheduled.find(task => task.delay === 5000);
+  scheduled.length = 0;
+  await nextRefresh.callback();
+  assert(requestedURL === '/api/status' && scheduled.filter(task => task.delay === 5000).length === 1,
+    'Scheduled status refresh did not fetch and reschedule');
   return 'PASS: freshness, errors, metrics, short presets, zoom/pan/follow, DST, time ticks, point inspection, date drafts, slow responses, gaps, escaping, and scheduling';
 }

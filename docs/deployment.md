@@ -26,6 +26,16 @@ DASHBOARD_PORT=8080
 DASHBOARD_BIND=0.0.0.0
 ```
 
+Choose the bind address for the intended clients. `0.0.0.0` preserves LAN and
+VPN access but listens on every IPv4 interface; the dashboard has no login or
+TLS, and reachable clients can read telemetry and host information. For VPN-only
+access, set `DASHBOARD_BIND` to the Pi's own Tailscale IPv4 address (shown by
+`tailscale ip -4`). That address must exist when the service starts. For a local
+authenticated reverse proxy or SSH tunnel, use `127.0.0.1`. Binding to a specific
+LAN address still allows other clients on that LAN; it is not authentication.
+Do not forward port 8080 from the internet. The Cabana service can use the same
+variable in a systemd user-service environment drop-in.
+
 Start the service and enable it at login:
 
 ```sh
@@ -163,9 +173,27 @@ the service user can read and write the restored file and parent directory.
 | No reply / invalid CRC | Correct RS485 adapter and documented wiring, controller power, slave address, 9600 8N1 |
 | Unexpected model | Do not assume another controller uses this register map; see compatibility documentation |
 | History cannot be saved | Free disk space, database path/permissions, service logs |
+| Stored readings shown as gaps | Back up the database, inspect unreadable records, and compare with an off-device backup; retries cannot repair damaged records |
 | Graph timestamps wrong | Correct system time and time synchronization on the Pi |
 | Browser cannot connect | Correct Pi address, port, interface binding, firewall, and active service |
 
 An identical CH340 adapter may have the same non-unique by-id name. If you have
 multiple adapters, identify the correct port carefully; a physical by-path
 device name can be useful. USB reconnects can change `/dev/ttyUSB0` numbering.
+
+History responses tolerate malformed JSON and JSON values that are not objects.
+The range endpoint reports how many selected display records were unreadable;
+these remain gaps and are never deleted or rewritten. This is not a full database
+integrity scan: records not selected for display are not decoded. If SQLite's
+JSON functions are available, inspect malformed solar records with the read-only
+query `SELECT ts FROM samples WHERE NOT json_valid(data);`, and climate records
+with `SELECT sensor_address, ts FROM sensor_samples WHERE NOT json_valid(data);`.
+Valid JSON with an unexpected structure also needs inspection. Startup logs an
+unreadable latest record and resumes collection without restoring that value.
+
+HTTP connections time out after 30 seconds of socket inactivity. Identical
+history-range queries share a 30-second in-process response cache with at most
+eight entries, cleared after a successful history commit. Queries with different
+date bounds are separate entries; this is not a request-rate limit or protection
+against arbitrary expensive queries. Queries still scan the selected interval,
+and all saved dates remain accessible. Keep access limited to trusted clients.
