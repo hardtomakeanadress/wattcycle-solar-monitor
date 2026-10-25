@@ -32,6 +32,8 @@ node_modules/
 wattcycle-control/
 heating-state.json
 heating-state.tmp
+charge-timer.json
+.charge-timer-*
 
 # Keep reference manuals in their attributed documentation folder only.
 *.pdf

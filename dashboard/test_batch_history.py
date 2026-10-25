@@ -79,7 +79,9 @@ class BatchHistoryTest(unittest.TestCase):
             self.assertEqual(db.execute('SELECT count(*) FROM sensor_samples').fetchone()[0], 0)
         status = server.snapshot()
         self.assertEqual(status['reading'], self.solar)
-        self.assertIn('could not save history', status['error'])
+        self.assertIsNone(status['error'])
+        self.assertIsNone(status['sensor']['error'])
+        self.assertIn('could not save history', status['history']['error'])
         self.assertEqual(status['history']['pending_solar_samples'], 1)
         self.assertEqual(status['history']['pending_sensor_samples'], 1)
         with patch.object(server.subprocess, 'run', side_effect=TimeoutError), self.assertLogs(level='ERROR'):

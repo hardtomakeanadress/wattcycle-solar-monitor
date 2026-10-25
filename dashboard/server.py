@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import signal
 import secrets
+import socket
 import sqlite3
 import subprocess
 import sys
@@ -22,11 +23,17 @@ from bluetooth_sensor import XiaomiSensor, INTERVAL as SENSOR_INTERVAL
 from system_info import SystemInfo
 from load_control import ControlServer
 from heating import Heating
+from victron_shunt import VictronShunt
+from charge_timer import ChargeTimer
 
 ROOT = Path(__file__).resolve().parent
 READER = ROOT.parent / 'read_controller.py'
 DB = Path(os.environ.get('SOLAR_DATABASE', str(ROOT / 'history.sqlite3'))).expanduser()
 SYSTEM = SystemInfo(DB.parent)
+CHARGE_TIMER = ChargeTimer(DB.parent / 'charge-timer.json')
+SHUNT = VictronShunt(os.environ.get('VICTRON_SHUNT_ADDRESS', ''),
+                     os.environ.get('VICTRON_SHUNT_KEY_FILE', str(DB.parent / 'victron.key')),
+                     on_reading=CHARGE_TIMER.observe)
 INTERVAL = 300
 STALE_AFTER = INTERVAL * 3
 LOCK = threading.Lock()
@@ -34,6 +41,8 @@ SERIAL_LOCK = threading.Lock()
 COMMAND_LOCK = threading.Lock()
 HEATING = None
 HEATING_KEY = None
+SHUTDOWN_LOCK = threading.Lock()
+SHUTDOWN_PENDING = False
 STATE = {'reading': None, 'error': None, 'last_attempt': None}
 STOP = threading.Event()
 PENDING_LOCK = threading.Lock()
@@ -83,10 +92,21 @@ class InvalidRange(ValueError):
 def stored_reading(raw):
     """An unreadable record is a gap, never a reason to rewrite history."""
     try:
-        reading = json.loads(raw)
+        reading = finite_json(json.loads(raw))
     except (ValueError, TypeError, UnicodeError):
         return None
     return reading if isinstance(reading, dict) else None
+
+
+def finite_json(value):
+    """Keep unknown numeric fields JSON-compatible, including damaged history."""
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
+    if isinstance(value, dict):
+        return {key: finite_json(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [finite_json(item) for item in value]
+    return value
 
 
 def clear_history_cache():
@@ -250,8 +270,9 @@ def initialize():
     SENSOR.on_reading = save_sensor_reading
     sensor_reading = stored_reading(sensor_row[0]) if sensor_row else None
     if sensor_reading is not None:
-        ts = sensor_reading.get('timestamp_seconds')
-        if not isinstance(ts, (int, float)) or not math.isfinite(ts):
+        values = [sensor_reading.get(key) for key in
+                  ('timestamp_seconds', 'temperature_C', 'humidity_percent', 'battery_V')]
+        if not all(type(value) in (int, float) and math.isfinite(value) for value in values):
             sensor_reading = None
     if sensor_row and sensor_reading is None:
         logging.error('Latest climate history record is unreadable; retrying the sensor')
@@ -342,9 +363,17 @@ def poll_controller():
 
 
 def control_load(enabled):
-    if HEATING is not None:
-        return HEATING.manual(enabled, execute_load)
-    return execute_load(enabled)
+    # Scheduling poweroff waits for accepted manual commands to complete.
+    if not SHUTDOWN_LOCK.acquire(blocking=False):
+        raise RuntimeError('Another LOAD command or shutdown is in progress; no command sent')
+    try:
+        if enabled and SHUTDOWN_PENDING:
+            raise RuntimeError('Pi shutdown already requested; LOAD ON is blocked')
+        if HEATING is not None:
+            return HEATING.manual(enabled, execute_load)
+        return execute_load(enabled)
+    finally:
+        SHUTDOWN_LOCK.release()
 
 
 def execute_load(enabled):
@@ -363,7 +392,7 @@ def run_load_command(enabled):
     if not SERIAL_LOCK.acquire(timeout=20):
         raise RuntimeError('Controller busy; no command sent')
     try:
-        if STOP.is_set():
+        if STOP.is_set() or (enabled and SHUTDOWN_PENDING):
             raise RuntimeError('Monitoring is shutting down; no command sent')
         try:
             result = subprocess.run([sys.executable, str(READER), '--load', 'on' if enabled else 'off'],
@@ -413,9 +442,9 @@ def snapshot():
     data.update(age_seconds=age, stale=age is None or age > STALE_AFTER, server_time_seconds=time.time(),
                 stale_after_seconds=STALE_AFTER, poll_interval_seconds=INTERVAL)
     data['sensor'] = SENSOR.snapshot()
+    data['shunt'] = SHUNT.snapshot()
+    data['timers'] = CHARGE_TIMER.snapshot(data['shunt'])
     data['history'] = history_status()
-    data['error'] = data['error'] or data['history']['error']
-    data['sensor']['error'] = data['sensor']['error'] or data['history']['error']
     data['heating'] = heating_status()
     return data
 
@@ -470,17 +499,39 @@ def heating_key():
 class Handler(BaseHTTPRequestHandler):
     timeout = 30
 
+    def trusted_control_host(self):
+        """Reject rebinding hostnames; preserve direct local-IP and host access."""
+        host = self.headers.get('Host', '')
+        parsed = urlsplit('//' + host)
+        if not parsed.hostname or parsed.username or parsed.password or parsed.path or parsed.query or parsed.fragment:
+            return False
+        # A rebinding domain does not become trusted by resolving to this Pi.
+        allowed = {'localhost', socket.gethostname().lower(), socket.gethostname().lower() + '.local'}
+        allowed.update(name.strip().lower() for name in os.environ.get('DASHBOARD_ALLOWED_HOSTS', '').split(',') if name.strip())
+        allowed.add(self.connection.getsockname()[0].lower())
+        return parsed.hostname.lower() in allowed
+
     def do_POST(self):
-        if self.path != '/api/heating':
+        if self.path not in ('/api/heating', '/api/shutdown'):
             self.send_error(404)
             return
         origin = self.headers.get('Origin')
-        if origin and (urlsplit(origin).scheme not in ('http', 'https') or urlsplit(origin).netloc != self.headers.get('Host')):
-            self.send_error(403, 'Cross-origin control is forbidden')
+        if self.path == '/api/shutdown' and not origin:
+            self.send_error(403, 'A same-origin browser request is required')
+            return
+        try:
+            if origin and (urlsplit(origin).scheme not in ('http', 'https') or urlsplit(origin).netloc != self.headers.get('Host')):
+                self.send_error(403, 'Cross-origin control is forbidden')
+                return
+            if not self.trusted_control_host():
+                self.send_error(403, 'Unrecognized dashboard host')
+                return
+        except ValueError:
+            self.send_error(403, 'Invalid dashboard host')
             return
         credential = self.headers.get('Authorization', '')
-        if HEATING_KEY is None or not hmac.compare_digest(credential.encode(), ('Bearer ' + HEATING_KEY).encode()):
-            self.send_error(403, 'A valid heating control key is required')
+        if self.path == '/api/heating' and (HEATING_KEY is None or not hmac.compare_digest(credential.encode(), ('Bearer ' + HEATING_KEY).encode())):
+            self.send_error(403, 'A valid control key is required')
             return
         try:
             if self.headers.get('Content-Type') != 'application/json' or self.headers.get('Transfer-Encoding'):
@@ -489,15 +540,67 @@ class Handler(BaseHTTPRequestHandler):
             if not 0 < length <= 128:
                 raise ValueError('Invalid request length')
             data = json.loads(self.rfile.read(length))
+            if self.path == '/api/shutdown':
+                if not isinstance(data, dict) or set(data) != {'shutdown'} or data['shutdown'] is not True:
+                    raise ValueError('Expected shutdown: true')
+                self.shutdown_pi()
+                return
             if not isinstance(data, dict) or set(data) != {'armed'} or type(data['armed']) is not bool:
                 raise ValueError('Expected a boolean armed value')
             if HEATING is None:
                 raise ValueError('Heating unavailable')
-            HEATING.request(data['armed'])
+            with SHUTDOWN_LOCK:
+                if SHUTDOWN_PENDING:
+                    raise ValueError('Pi shutdown already requested')
+                HEATING.request(data['armed'])
         except (OSError, ValueError) as exc:
             self.send_error(400, str(exc))
             return
         body = json.dumps({'heating': heating_status()}).encode()
+        self.send_response(202)
+        self.send_header('Content-Type', 'application/json')
+        self.send_header('Content-Length', str(len(body)))
+        self.send_header('Cache-Control', 'no-store')
+        self.end_headers()
+        try:
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+
+    def shutdown_pi(self):
+        """Ask logind for an orderly shutdown; never run the website as root."""
+        global SHUTDOWN_PENDING
+        with SHUTDOWN_LOCK:
+            if SHUTDOWN_PENDING:
+                self.send_error(409, 'Pi shutdown already requested')
+                return
+            h = heating_status()
+            if h.get('armed') or h.get('pending') or h.get('owns_load'):
+                self.send_error(409, 'Turn off heating and wait for confirmed OFF before shutting down')
+                return
+            SHUTDOWN_PENDING = True
+            try:
+                # logind keeps this timer even if the HTTP client disconnects.
+                subprocess.run(['/usr/bin/busctl', '--system', '--allow-interactive-authorization=no',
+                    '--timeout=5s', 'call', 'org.freedesktop.login1', '/org/freedesktop/login1',
+                    'org.freedesktop.login1.Manager', 'ScheduleShutdown', 'st', 'poweroff',
+                    str(int((time.time() + 10) * 1_000_000))],
+                    check=True, capture_output=True, timeout=7)
+            except subprocess.CalledProcessError:
+                SHUTDOWN_PENDING = False
+                logging.exception('Pi shutdown authorization failed')
+                self.send_error(503, 'Shutdown rejected by the operating system')
+                return
+            except OSError:
+                SHUTDOWN_PENDING = False
+                logging.exception('Pi shutdown command could not start')
+                self.send_error(503, 'Shutdown command unavailable; no shutdown scheduled')
+                return
+            except subprocess.TimeoutExpired:
+                logging.exception('Pi shutdown outcome unconfirmed')
+                self.send_error(503, 'Shutdown outcome unconfirmed; check the Pi before retrying')
+                return
+        body = json.dumps({'shutdown': 'scheduled', 'delay_seconds': 10}).encode()
         self.send_response(202)
         self.send_header('Content-Type', 'application/json')
         self.send_header('Content-Length', str(len(body)))
@@ -525,7 +628,7 @@ class Handler(BaseHTTPRequestHandler):
         if route == '/':
             body, kind = (ROOT / 'index.html').read_bytes(), 'text/html; charset=utf-8'
         elif route == '/api/status':
-            body, kind = json.dumps(snapshot()).encode(), 'application/json'
+            body, kind = json.dumps(finite_json(snapshot()), allow_nan=False).encode(), 'application/json'
         elif route == '/api/system':
             body, kind = json.dumps(SYSTEM.snapshot()).encode(), 'application/json'
         elif route == '/api/history/range':
@@ -558,16 +661,19 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
+    global SHUTDOWN_PENDING
     logging.basicConfig(level=logging.INFO)
     initialize()
     STOP.clear()
+    SHUTDOWN_PENDING = False
     server = ThreadingHTTPServer((os.environ.get('DASHBOARD_BIND', '0.0.0.0'), int(os.environ.get('DASHBOARD_PORT', '8080'))), Handler)
-    server.daemon_threads = True
+    server.daemon_threads = False
     def stop(_signum, _frame):
         raise KeyboardInterrupt
     signal.signal(signal.SIGTERM, stop)
     collector = threading.Thread(target=poll_loop, daemon=True, name='solar-collector')
     sensor_thread = None
+    shunt_thread = None
     control = None
     try:
         try:
@@ -580,11 +686,17 @@ def main():
             logging.exception('Local LOAD control unavailable; monitoring continues')
         collector.start()
         sensor_thread = SENSOR.start(STOP)
+        shunt_thread = SHUNT.start(STOP)
         logging.info('Dashboard listening on %s:%s', *server.server_address)
         server.serve_forever()
     except KeyboardInterrupt:
         pass
     finally:
+        with SHUTDOWN_LOCK:
+            SHUTDOWN_PENDING = True
+        # Finish HTTP reads before the final write, so readers cannot prevent
+        # SQLite committing accepted samples during an orderly shutdown.
+        server.server_close()
         if control is not None:
             control.close()
         if HEATING is not None:
@@ -595,8 +707,9 @@ def main():
         collector.join()
         if sensor_thread is not None:
             sensor_thread.join()
+        if shunt_thread is not None:
+            shunt_thread.join()
         saved = flush_history()
-        server.server_close()
     return 0 if saved else 1
 
 

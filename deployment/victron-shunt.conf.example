@@ -1,0 +1,4 @@
+[Service]
+Environment=VICTRON_SHUNT_ADDRESS=REPLACE_WITH_SHUNT_ADDRESS
+# Default key file: victron.key beside history.sqlite3 (private, mode 0600).
+# Environment=VICTRON_SHUNT_KEY_FILE=/absolute/private/path/victron.key

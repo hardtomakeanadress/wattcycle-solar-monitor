@@ -53,12 +53,17 @@ flowchart LR
 - **Optional Xiaomi climate panel:** live LYWSD03MMC temperature, humidity,
   battery voltage, independent freshness, and saved temperature/humidity history.
   Uses the host's existing BlueZ `gatttool` and `stdbuf` commands; no Python packages.
+- **Optional Victron battery panel:** real SmartShunt state of charge, voltage,
+  signed current, calculated net power, consumed Ah, estimated time remaining and
+  alarms. Five-second live updates with clear stale/unknown states; existing
+  BlueZ and Linux AES support, with no new packages. See
+  [configuration and limits](dashboard/README.md).
 - **JSON endpoints:** `/api/status`, `/api/history/range`, and the compatible
   legacy `/api/history` endpoint.
 
 ## Hardware and compatibility
 
-The Cabana bank contains **eight WattCycle 12 V, 100 Ah LiFePO4 batteries with non-communicating BMSs**. The owner
+The Cabana bank contains **six WattCycle 12 V, 100 Ah LiFePO4 batteries with non-communicating BMSs**. The owner
 plans to put the existing Bluetooth sensor inside the battery enclosure and use
 **two 24 V, 75 W truck light bulbs in parallel** for heating. See
 [battery enclosure requirements](docs/hardware.md#battery-enclosure-and-planned-heating)

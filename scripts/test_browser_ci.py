@@ -12,6 +12,7 @@ import sys
 import tempfile
 import threading
 import time
+from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / 'dashboard'))
@@ -50,6 +51,14 @@ def main():
         server.HEATING = server.Heating(server.SENSOR, lambda _: (_ for _ in ()).throw(AssertionError('hardware')),
                                        lambda: None, Path(folder)/'heating-state.json', ready=False)
         server.HEATING_KEY = 'browser-fixture-key'
+        server.SHUNT = SimpleNamespace(snapshot=lambda: dict(enabled=True, error=None,
+            stale=False, age_seconds=0, stale_after_seconds=30,
+            reading=dict(battery_V=27.4, current_A=10.3, net_power_W=282.22,
+                         soc_percent=71.5, consumed_Ah=-85.5, time_to_go_minutes=None,
+                         alarm_bits=0, alarms=[])))
+        server.CHARGE_TIMER = SimpleNamespace(snapshot=lambda _: dict(configured=True,
+            target_percent=100, state='charging', charge_minutes=125, source='calculated',
+            settings=dict(capacity_Ah=300, charge_efficiency_percent=95, discharge_floor_percent=30)))
         http = server.ThreadingHTTPServer(('127.0.0.1', 0), server.Handler)
         thread = threading.Thread(target=http.serve_forever, kwargs={'poll_interval': .05})
         thread.start()

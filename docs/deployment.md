@@ -61,6 +61,25 @@ heater ownership triggers an OFF recovery attempt and a latched alarm. Keep
 
 ## Maintenance
 
+### Website shutdown (Cabana)
+
+Select **Shut down Pi** in the page footer. No key or confirmation is
+required: anyone who can reach the dashboard can shut down the Pi. A same-origin
+browser `POST /api/shutdown` schedules an orderly OS shutdown after ten seconds.
+Heating must first be disabled with no pending operation or owned LOAD.
+The website goes offline; starting the Pi again requires local power control.
+The normal service stop flushes pending history.
+
+Cabana uses the existing systemd-logind and polkit services. An administrator
+installs [50-cabana-shutdown.rules](../deployment/50-cabana-shutdown.rules) as
+root-owned mode 0644 at `/etc/polkit-1/rules.d/50-cabana-shutdown.rules`.
+This installation-specific rule authorizes only power-off actions for `alex`,
+including when other sessions exist; it does not authorize ignoring inhibitors.
+The dashboard retains `NoNewPrivileges=yes` and runs without root privileges.
+Keep the heating control key private and use Tailscale or HTTPS. Authorization can be
+checked without shutdown using `pkcheck` for the running dashboard process.
+An unconfirmed request is never retried automatically.
+
 ```sh
 systemctl --user restart wattcycle-solar
 journalctl --user -u wattcycle-solar -n 50
@@ -216,3 +235,10 @@ eight entries, cleared after a successful history commit. Queries with different
 date bounds are separate entries; this is not a request-rate limit or protection
 against arbitrary expensive queries. Queries still scan the selected interval,
 and all saved dates remain accessible. Keep access limited to trusted clients.
+
+Control requests validate the dashboard Host as well as Origin. Direct access by
+this Pi's local/Tailscale IP, its hostname, `hostname.local` and localhost works
+without configuration. For an additional trusted DNS name or reverse proxy, set
+`DASHBOARD_ALLOWED_HOSTS` to a comma-separated list of hostnames (without ports).
+The proxy must preserve the browser's Host/Origin. Unlisted rebinding domains
+cannot invoke control endpoints.

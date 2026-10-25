@@ -20,6 +20,7 @@ class LoadControlTest(unittest.TestCase):
         self.path = Path(self.directory.name) / 'private' / 'control.sock'
         for name, value in [('DB', Path(self.directory.name) / 'history.sqlite3'),
                             ('STOP', threading.Event()), ('SERIAL_LOCK', threading.Lock()),
+                            ('SHUTDOWN_PENDING', False),
                             ('STATE', dict(reading=None, error=None, last_attempt=None))]:
             p = patch.object(server, name, value)
             p.start()

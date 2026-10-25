@@ -1,0 +1,9 @@
+// Installed by root at /etc/polkit-1/rules.d/50-cabana-shutdown.rules.
+// Only shutdown is granted; the dashboard keeps NoNewPrivileges=yes.
+polkit.addRule(function(action, subject) {
+    if (subject.user === "alex" &&
+        (action.id === "org.freedesktop.login1.power-off" ||
+         action.id === "org.freedesktop.login1.power-off-multiple-sessions")) {
+        return polkit.Result.YES;
+    }
+});

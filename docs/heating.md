@@ -7,7 +7,8 @@ owner on 16 October 2026: the bulbs and enclosure sensor installation are not re
 
 ## Installation recorded from the owner
 
-Eight WattCycle 12 V, 100 Ah LiFePO4 batteries, without BMS communications;
+Six WattCycle 12 V, 100 Ah LiFePO4 batteries currently installed (owner correction,
+25 October 2026), without BMS communications;
 two planned 24 V, 75 W truck bulbs connected in parallel to LOAD; the existing
 Xiaomi Bluetooth sensor is intended to go inside the enclosure, away from direct
 bulb heat. Exact battery variant and bank wiring remain unconfirmed. Do not infer
@@ -26,7 +27,7 @@ the bank arrangement from the controller's 24 V nominal reading.
 These are manufacturer statements for the cited products/guidance, not proof of
 the installed batteries' BMS behavior. Confirm the exact model/manual before
 commissioning. No manufacturer prescription for this external bulb heater was
-found. Enclosure air can warm much faster than eight batteries; air temperature
+found. Enclosure air can warm much faster than six batteries; air temperature
 does not establish that every battery's cells are safe to charge. The software
 does not interrupt solar charging and does not report charging as safe.
 

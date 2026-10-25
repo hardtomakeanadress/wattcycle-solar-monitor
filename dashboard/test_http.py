@@ -20,6 +20,7 @@ class HTTPTest(unittest.TestCase):
         self.addCleanup(directory.cleanup)
         for name, value in [('DB', Path(directory.name) / 'history.sqlite3'),
                             ('STOP', threading.Event()),
+                            ('SHUTDOWN_PENDING', False),
                             ('STATE', dict(reading=None, error=None, last_attempt=None)),
                             ('SENSOR', bluetooth_sensor.XiaomiSensor('AA:BB:CC:DD:EE:FF'))]:
             p = patch.object(server, name, value)
@@ -104,6 +105,20 @@ class HTTPTest(unittest.TestCase):
         self.assertIsNone(server.STATE['last_attempt'])
         self.assertIsNone(server.SENSOR.snapshot()['reading'])
 
+    def test_nonfinite_restored_values_are_null_and_bad_sensor_is_not_restored(self):
+        with server.database() as db:
+            db.execute('INSERT INTO samples VALUES (100, ?)',
+                       ('{"timestamp_utc":"2026-10-25T00:00:00+00:00","charge_W":NaN,"battery_V":1e999}',))
+            db.execute('INSERT INTO sensor_samples VALUES (?, 100, ?)',
+                       (server.SENSOR.address, '{"timestamp_seconds":100,"temperature_C":20}'))
+        with self.assertLogs(level='ERROR'):
+            server.initialize()
+        raw = self.request('/api/status').wfile.getvalue()
+        data = json.loads(raw, parse_constant=lambda value: self.fail('Non-JSON number ' + value))
+        self.assertIsNone(data['reading']['charge_W'])
+        self.assertIsNone(data['reading']['battery_V'])
+        self.assertIsNone(data['sensor']['reading'])
+
     def test_cache_reuse_expiry_size_and_commit_invalidation(self):
         with patch.object(server.time, 'monotonic', return_value=10) as clock, \
                 patch.object(server, 'history_range', wraps=server.history_range) as query:
@@ -160,22 +175,30 @@ class HTTPTest(unittest.TestCase):
                 patch.object(server, 'ThreadingHTTPServer') as http, \
                 patch.object(server.threading, 'Thread') as thread, \
                 patch.object(server.signal, 'signal'), \
-                patch.object(server, 'flush_history', return_value=False):
+                patch.object(server, 'flush_history', return_value=False) as flush:
+            lifecycle = Mock()
+            lifecycle.attach_mock(http.return_value.server_close, 'close_http')
+            lifecycle.attach_mock(flush, 'flush')
             http.return_value.serve_forever.side_effect = KeyboardInterrupt
             self.assertEqual(server.main(), 1)
             thread.return_value.start.assert_called_once()
             thread.return_value.join.assert_called_once()
             http.return_value.server_close.assert_called_once()
             control.return_value.close.assert_called_once()
+            self.assertEqual([call[0] for call in lifecycle.mock_calls], ['close_http', 'flush'])
+            self.assertFalse(http.return_value.daemon_threads)
 
     def post(self, body=b'{"armed":true}', key='test-key', origin='http://cabana:8080', **headers):
         h = object.__new__(server.Handler)
+        h.connection = Mock()
+        h.connection.getsockname.return_value = ('127.0.0.1', 8080)
         h.path, h.rfile, h.wfile = '/api/heating', io.BytesIO(body), io.BytesIO()
         h.headers = {'Host':'cabana:8080', 'Origin':origin, 'Authorization':'Bearer '+key,
                      'Content-Type':'application/json', 'Content-Length':str(len(body)), **headers}
         h.send_response, h.send_error = Mock(), Mock()
         h.send_header, h.end_headers = Mock(), Mock()
-        h.do_POST()
+        with patch.object(server.socket, 'gethostname', return_value='cabana'):
+            h.do_POST()
         return h
 
     def test_heating_auth_origin_and_payload_before_hardware_access(self):

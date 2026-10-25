@@ -4,7 +4,7 @@ const elements = new Map();
 const document = {getElementById(id) {
   if (!elements.has(id)) {
     const classes = new Set();
-    elements.set(id, {textContent: '', innerHTML: '', value: '', setAttribute(name, value) { this[name] = value; }, classList: {
+    elements.set(id, {textContent: '', innerHTML: '', value: '', showModal() { this.open=true; }, close() { this.open=false; }, setAttribute(name, value) { this[name] = value; }, classList: {
       toggle(name, enabled) { if (enabled) classes.add(name); else classes.delete(name); },
       remove(name) { classes.delete(name); },
       contains(name) { return classes.has(name); }
@@ -83,6 +83,8 @@ async function runFrontendTests() {
     dropped_solar_samples:3,dropped_sensor_samples:2};
   await refresh();
   assert(!$('history-storage-warning').classList.contains('hidden'), 'Storage backlog hidden');
+  assert($('connection').textContent==='● Live' && !$('solar-tile').classList.contains('stale'),
+    'Storage failure incorrectly marks fresh solar unavailable');
   assert($('history-storage-warning').textContent.includes('2016 solar / 1008 climate readings waiting') &&
     $('history-storage-warning').textContent.includes('7d') &&
     $('history-storage-warning').textContent.includes('3 solar / 2 climate readings were not recorded'), 'Backlog, age or loss counts omitted');
@@ -380,5 +382,75 @@ async function runFrontendTests() {
   assert($('heating-arm').disabled && $('heating-disable').disabled, 'Offline controls enabled');
   assert($('heating-message').textContent.includes('Cannot confirm'), 'Offline alarm omitted');
   failedFetch = false;
-  return 'PASS: heating lock, alarms, unknown output, offline controls, freshness, history, system panel and scheduling';
+  fixture.shunt = {enabled:true, age_seconds:0, stale_after_seconds:30, error:null,
+    reading:{battery_V:26.27,current_A:-17.027,net_power_W:-447.30,soc_percent:93.9,
+      consumed_Ah:-19,time_to_go_minutes:456,alarm_bits:0,alarms:[]}};
+  await refresh();
+  assert(!$('battery-panel').classList.contains('hidden'), 'Configured shunt hidden');
+  assert($('battery-soc').textContent === '93.9' && $('battery-current').textContent === '-17.03', 'Shunt measurements wrong');
+  assert($('battery-flow').textContent === 'Discharging' && $('battery-remaining').textContent === '7h 36m', 'Discharge direction or time wrong');
+  fixture.timers = {configured:true,target_percent:100,state:'paused',charge_minutes:null,
+    settings:{capacity_Ah:300,discharge_floor_percent:30,show_charge_timer:true,show_discharge_timer:true,averaging_minutes:3}};
+  await refresh();
+  assert($('timer-floor-label').textContent==='30%' && $('timer-charge-label').textContent==='100%', 'Timer endpoints wrong');
+  fixture.shunt.reading.current_A = 4; fixture.shunt.reading.net_power_W = 105.08;
+  await refresh();
+  assert($('battery-flow').textContent === 'Charging' && $('battery-remaining').textContent === '—', 'Charging still shows discharge countdown');
+  fixture.timers.state='charging';fixture.timers.charge_minutes=125;
+  await refresh();
+  assert($('battery-charge-remaining').textContent==='≈ 2h 5m','Calculated charging ETA missing');
+  fixture.timers.state='full';fixture.timers.charge_minutes=0;
+  await refresh();
+  assert($('battery-charge-remaining').textContent==='✓','Full target not marked');
+  assert(!$('charge-timer-row').classList.contains('hidden') &&
+    !$('discharge-timer-row').classList.contains('hidden'), 'Timers should remain visible');
+  assert($('battery-flow-voltage').textContent==='26.27' &&
+    $('battery-flow-current').textContent==='4.00', 'Flow card omitted volts or amps');
+  assert($('panel-voltage').textContent==='44.0' &&
+    $('solar-charge-current').textContent==='0.70', 'Solar card omitted measured voltage/current');
+  fixture.shunt.reading.soc_percent = null;
+  await refresh();
+  assert($('battery-soc').textContent === '—' && $('battery-soc-note').textContent === 'Not synchronized', 'Unknown SOC shown as zero');
+  fixture.shunt.reading.alarm_bits = 4; fixture.shunt.reading.alarms = ['Low state of charge'];
+  await refresh();
+  assert($('battery-panel').classList.contains('alarm') && $('battery-message').textContent.includes('Low state of charge'), 'Shunt alarm hidden');
+  fixture.shunt.age_seconds = 31;
+  await refresh();
+  assert($('battery-panel').classList.contains('stale') && $('battery-flow').textContent === 'Last known reading', 'Old battery data shown as live');
+  delete fixture.shunt;
+  delete fixture.timers;
+  await refresh();
+  assert($('battery-panel').classList.contains('hidden'), 'Unconfigured shunt shown');
+  fixture.sensor = {enabled:true, reading:{temperature_C:null, humidity_percent:'bad'},
+    age_seconds:0, error:null, stale_after_seconds:1800};
+  const queuedBefore = scheduled.length;
+  await refresh();
+  assert($('sensor-temperature').textContent==='—' && $('sensor-battery').textContent==='—',
+    'Malformed sensor fields must be unavailable');
+  assert(scheduled.length > queuedBefore, 'Malformed sensor stopped refresh scheduling');
+  delete fixture.sensor;
+  // One click sends shutdown with no key or confirmation; OS calls are simulated.
+  let powerCalls = 0;
+  window.confirm = () => { throw new Error('Shutdown must not show a confirmation'); };
+  fetch = async () => { powerCalls++; return {ok:false,status:409}; };
+  await shutdownPi();
+  assert(!shutdownBusy && !$('shutdown-button').disabled, 'Rejected shutdown locks control');
+  fetch = async () => { powerCalls++; throw new Error('Offline'); };
+  await shutdownPi();
+  assert(shutdownBusy && $('shutdown-button').disabled, 'Ambiguous shutdown allows automatic retry');
+  shutdownBusy = false;
+  fetch = async (url, options) => {
+    powerCalls++;
+    assert(url === '/api/shutdown' && options.method === 'POST', 'Wrong shutdown request');
+    assert(!options.headers.Authorization, 'Shutdown still requires a key');
+    assert(options.body === '{"shutdown":true}', 'Wrong shutdown body');
+    return {ok:true};
+  };
+  await shutdownPi();
+  assert($('shutdown-button').disabled && $('shutdown-message').textContent.includes('10 seconds'), 'Accepted shutdown missing');
+  const callsAfterShutdown = powerCalls;
+  await shutdownPi();
+  assert(powerCalls === callsAfterShutdown, 'Duplicate shutdown sent');
+  fetch = originalFetch;
+  return 'PASS: one-click shutdown, duplicate prevention, heating, history and system panel';
 }

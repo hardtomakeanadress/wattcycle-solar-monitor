@@ -8,9 +8,9 @@ controller pinout. No physical cable inspection was performed remotely.
 
 ## Battery enclosure and planned heating
 
-Owner-provided requirements, recorded **16 October 2026**:
+Owner-provided requirements, recorded **16 October 2026**; installed battery count corrected by the owner **25 October 2026**:
 
-- There are **eight WattCycle 12 V, 100 Ah LiFePO4 batteries**, with a BMS that has
+- There are **six WattCycle 12 V, 100 Ah LiFePO4 batteries**, with a BMS that has
   **no Bluetooth or other communication mechanism**, as confirmed by the owner.
   Exact variant (standard/Group 24/Mini), series/parallel bank configuration, and autonomous
   BMS low-temperature charge protection have not yet been confirmed. Lack of BMS
@@ -27,6 +27,11 @@ Owner-provided requirements, recorded **16 October 2026**:
   battery charging when too cold, with remote control from the existing monitor.
   The [heating feature](heating.md) is implemented with an installation lock and
   remains disabled. Charging inhibition is not implemented or verified.
+
+The SmartShunt capacity was read back as **300 Ah** on 25 October 2026. Its
+discharge floor was changed from **50% to 30%** at the owner’s request and
+verified after reconnecting. These settings do not independently establish the
+physical series/parallel wiring. Expansion is planned; six batteries are installed now.
 
 Preserve these owner-provided facts in future work; do not infer a battery model,
 equate enclosure temperature with cell temperature, or assume built-in BMS cold

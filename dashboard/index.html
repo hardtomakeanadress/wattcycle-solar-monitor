@@ -16,30 +16,586 @@
 <style>
 .heating-panel{margin:0 0 18px;padding:14px 18px;border:1px solid #52634f}.heating-heading{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.heating-heading h2{margin:0;font-size:15px}.heating-state{font-size:13px;font-weight:650;color:#d6ee9b;margin-left:auto}.heating-panel.heating-active{border-color:#e4b862;background:#302b1c}.heating-panel.heating-alarm{border:2px solid #ff7979;background:#351e20}.heating-alarm .heating-state{color:#ffaaaa}.heating-message{line-height:1.4;margin:8px 0 0;font-size:13px}.heating-facts{display:flex;gap:14px;flex-wrap:wrap;color:#bac8bd;font-size:12px;line-height:1.5;margin-top:8px}.heating-controls{display:flex;align-items:center;gap:8px;margin-left:auto}.heating-controls button{padding:7px 12px;font-size:13px}.heating-controls .stop-heating{background:#5b292b;color:#ffe1df;border:1px solid #a75454}.heating-access{font-size:12px;color:#b3bfb6}.heating-access summary{cursor:pointer}.heating-access input{width:210px;max-width:100%;font-size:13px;padding:7px;margin-top:8px}.heating-facts a{color:#b3bfb6}.heating-error{color:#ffaaaa;font-size:13px;line-height:1.4;margin:8px 0 0}.heating-error:empty{display:none}@media(max-width:500px){.heating-controls{margin-left:0}.heating-state{margin-left:auto}.heating-heading{gap:8px 12px}}
 </style>
+<style>
+/* Shared dashboard tokens and adaptive tiles; state classes come from live telemetry. */
+:root {
+  --surface:#19231d;
+  --surface-raised:#203029;
+  --border:#314338;
+  --muted:#a9b9ac;
+  --green:#b8e690;
+  --amber:#f2c66d;
+  --blue:#8bcbdc;
+  --red:#ff9999;
+  --gap:clamp(.6rem,1.3vw,1rem);
+  --radius:1rem;
+  --pad:clamp(.85rem,2vw,1.35rem);
+}
+main {
+  padding:clamp(1rem,3vw,2rem) clamp(.85rem,3vw,1.5rem);
+}
+header {
+  margin-bottom:1.2rem;
+  gap:.75rem;
+  align-items:center;
+}
+header .brand {
+  font-size:.7rem;
+  letter-spacing:2px;
+}
+h1 {
+  font-size:clamp(1.12rem,2.4vw,1.75rem);
+  letter-spacing:-.035em;
+  margin:.4rem 0 0;
+  line-height:1.2;
+}
+.pill {
+  font-size:.7rem;
+  padding:.5rem .65rem;
+}
+.icon {
+  width:1.25em;
+  height:1.25em;
+  flex:none;
+  fill:none;
+  stroke:currentColor;
+  stroke-width:1.7;
+  stroke-linecap:round;
+  stroke-linejoin:round;
+}
+.sr-only {
+  position:absolute;
+  width:1px;
+  height:1px;
+  padding:0;
+  overflow:hidden;
+  clip-path:inset(50%);
+  white-space:nowrap;
+}
+.svg-library {
+  position:absolute;
+  width:0;
+  height:0;
+  overflow:hidden;
+}
+.overview {
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(min(100%,clamp(8rem,20vw,14rem)),1fr));
+  gap:var(--gap);
+  align-items:stretch;
+  margin-bottom:var(--gap);
+}
+.tile {
+  --tone:var(--green);
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  padding:var(--pad);
+  min-width:0;
+  display:flex;
+  flex-direction:column;
+  gap:.75rem;
+}
+.tile.hidden {
+  display:none;
+}
+.tile-heading {
+  display:flex;
+  align-items:center;
+  gap:.55rem;
+  font-size:.8rem;
+  color:var(--muted);
+  min-height:1.8rem;
+}
+.tile-icon {
+  display:grid;
+  place-items:center;
+  flex:none;
+  width:2rem;
+  aspect-ratio:1;
+  border-radius:50%;
+  color:var(--tone);
+  background:color-mix(in srgb,var(--tone) 12%,transparent);
+}
+.tile-value {
+  font-size:clamp(1.6rem,4.8vw,2.5rem);
+  font-weight:550;
+  letter-spacing:-.055em;
+  color:var(--tone);
+  font-variant-numeric:tabular-nums;
+  line-height:1.12;
+  white-space:nowrap;
+}
+.tile-value .unit {
+  font-size:.45em;
+  letter-spacing:0;
+  margin-left:.25em;
+  color:var(--muted);
+}
+.tile-meta {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:.35rem;
+  flex-wrap:wrap;
+  color:var(--muted);
+  font-size:.7rem;
+  margin-top:auto;
+  line-height:1.35;
+}
+.tile-meta:empty {
+  display:none;
+}
+.tile.battery-card {
+  background:linear-gradient(135deg,color-mix(in srgb,var(--tone) 7%,var(--surface)),var(--surface));
+}
+.battery-gauge {
+  position:relative;
+  width:clamp(4.8rem,9vw,6rem);
+  aspect-ratio:1;
+  margin:auto;
+}
+.battery-gauge svg {
+  width:100%;
+  height:100%;
+  transform:rotate(-90deg);
+}
+.battery-gauge circle {
+  fill:none;
+  stroke-width:8;
+}
+.battery-track {
+  stroke:var(--border);
+}
+.battery-level {
+  stroke:var(--tone);
+  stroke-linecap:round;
+  transition:stroke-dashoffset .4s ease;
+}
+.battery-gauge-center {
+  position:absolute;
+  inset:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  flex-direction:column;
+}
+.battery-soc {
+  font-size:clamp(1.6rem,3.5vw,2rem);
+  font-weight:550;
+  letter-spacing:-.06em;
+  font-variant-numeric:tabular-nums;
+}
+.battery-soc .unit {
+  font-size:.4em;
+  margin-left:.1em;
+  color:var(--muted);
+}
+#battery-soc-note {
+  font-size:.55rem;
+  text-align:center;
+  color:var(--muted);
+  max-width:90%;
+}
+.state-badge {
+  display:inline-flex;
+  align-items:center;
+  gap:.35rem;
+  color:var(--tone);
+  font-size:.75rem;
+}
+.state-badge::before {
+  content:'';
+  width:.4rem;
+  aspect-ratio:1;
+  border-radius:50%;
+  background:currentColor;
+}
+.tile.discharging {
+  --tone:var(--amber);
+}
+.tile.charging {
+  --tone:var(--green);
+}
+.tile.idle {
+  --tone:var(--blue);
+}
+.tile.stale {
+  --tone:var(--muted);
+}
+.tile.alarm {
+  --tone:var(--red);
+  border-color:var(--red);
+}
+.solar-tile {
+  --tone:var(--amber);
+}
+.solar-tile.idle {
+  --tone:var(--muted);
+}
+.solar-cycle {
+  display:inline-flex;
+  align-items:center;
+  gap:.2rem;
+  white-space:nowrap;
+}
+.solar-cycle .icon {
+  color:var(--amber);
+}
+.notice {
+  display:flex;
+  gap:.65rem;
+  align-items:center;
+  background:color-mix(in srgb,var(--amber) 10%,var(--surface));
+  color:var(--amber);
+  border:1px solid color-mix(in srgb,var(--amber) 45%,var(--border));
+  padding:.7rem var(--pad);
+  border-radius:var(--radius);
+  font-size:.8rem;
+  margin-bottom:var(--gap);
+}
+.notice.hidden {
+  display:none;
+}
+.battery-message:empty {
+  display:none;
+}
+.conditions {
+  margin:var(--gap) 0;
+}
+.conditions.hidden {
+  display:none;
+}
+.conditions-heading {
+  display:flex;
+  justify-content:space-between;
+  align-items:baseline;
+  gap:.5rem;
+  margin:0 0 .55rem;
+}
+.conditions-heading h2 {
+  margin:0;
+  font-size:.8rem;
+  color:var(--muted);
+}
+.conditions-heading small {
+  font-size:.65rem;
+  color:var(--muted);
+}
+.condition-tiles {
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:var(--gap);
+}
+.condition-tiles .tile {
+  --tone:var(--blue);
+  display:grid;
+  grid-template-columns:auto 1fr auto;
+  gap:.6rem;
+  align-items:center;
+  padding:.8rem var(--pad);
+}
+.condition-label {
+  font-size:.75rem;
+  color:var(--muted);
+}
+.condition-value {
+  font-size:clamp(1.1rem,3vw,1.5rem);
+  font-variant-numeric:tabular-nums;
+  white-space:nowrap;
+}
+.condition-value .unit {
+  font-size:.6em;
+  color:var(--muted);
+  margin-left:.1em;
+}
+.conditions.stale .condition-value,.conditions.stale .tile-icon {
+  color:var(--muted);
+}
+.climate-message {
+  margin:.5rem 0 0;
+}
+.detail-stack {
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(min(100%,15rem),1fr));
+  align-items:start;
+  gap:.65rem;
+  margin:var(--gap) 0;
+}
+.equipment-details,.heating-panel {
+  padding:0;
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  margin:0;
+  min-width:0;
+}
+.equipment-details>summary,.heating-panel>summary {
+  display:flex;
+  align-items:center;
+  gap:.65rem;
+  padding:.8rem var(--pad);
+  cursor:pointer;
+  list-style:none;
+  font-size:.8rem;
+  min-height:2.75rem;
+}
+.equipment-details>summary::-webkit-details-marker,.heating-panel>summary::-webkit-details-marker {
+  display:none;
+}
+.equipment-details>summary::after,.heating-panel>summary::after {
+  content:'›';
+  font-size:1.2rem;
+  color:var(--muted);
+  margin-left:auto;
+  transition:transform .15s;
+}
+.equipment-details[open]>summary::after,.heating-panel[open]>summary::after {
+  transform:rotate(90deg);
+}
+.equipment-details>summary>.icon,.heating-panel>summary>.icon {
+  color:var(--muted);
+}
+.equipment-details>summary small {
+  font-size:.65rem;
+  color:var(--muted);
+  margin-left:auto;
+}
+.equipment-details>summary small+* {
+  margin-left:0;
+}
+.detail-body {
+  padding:0 var(--pad) var(--pad);
+}
+.detail-grid {
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(min(100%,9rem),1fr));
+  gap:1rem;
+}
+.detail-metric {
+  display:flex;
+  flex-direction:column;
+  gap:.35rem;
+  font-size:.75rem;
+  color:var(--muted);
+}
+.detail-metric strong {
+  font-size:1.05rem;
+  font-weight:500;
+  color:#edf3e8;
+  font-variant-numeric:tabular-nums;
+}
+.detail-note {
+  color:var(--muted);
+  font-size:.7rem;
+  line-height:1.5;
+  margin:.8rem 0 0;
+}
+.detail-note:empty {
+  display:none;
+}
+.heating-heading h2 {
+  font-size:.8rem;
+}
+.heating-heading .heating-state {
+  font-size:.7rem;
+  margin-left:auto;
+}
+.heating-controls {
+  justify-content:flex-start;
+  margin:0 0 .8rem;
+}
+.heating-message {
+  font-size:.75rem;
+}
+.heating-panel.heating-alarm {
+  border-color:var(--red);
+}
+.heating-panel.heating-active {
+  border-color:var(--amber);
+}
+.heating-facts {
+  gap:.7rem;
+}
+.equipment-group {
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(min(100%,22rem),1fr));
+  gap:var(--gap);
+  margin-top:var(--gap);
+  align-items:start;
+}
+.system-panel {
+  margin:0;
+  padding:var(--pad);
+}
+.system-panel.equipment-details {
+  padding:0;
+}
+.system-note:empty {
+  display:none;
+}
+.system-model {
+  font-size:.75rem;
+  margin-bottom:1rem;
+}
+.system-value {
+  font-size:clamp(1rem,2vw,1.5rem);
+}
+.system-stats {
+  gap:1rem;
+}
+.system-note {
+  font-size:.7rem;
+}
+.system-heading h2 {
+  font-size:.85rem;
+}
+.history-panel {
+  padding:var(--pad);
+  margin-top:var(--gap);
+}
+.history-controls {
+  margin:1rem 0;
+  gap:.75rem;
+}
+.history-controls select,.history-controls input,.history-controls button {
+  font-size:.8rem;
+}
+.history-note {
+  font-size:.7rem;
+}
+.history-panel h2 {
+  font-size:.95rem;
+  margin-bottom:0;
+}
+.history-navigation button {
+  font-size:.75rem;
+}
+.history-note summary {
+  cursor:pointer;
+}
+.metric-chart .point-detail {
+  min-height:0;
+  font-size:.7rem;
+}
+.metric-chart .summary {
+  font-size:.65rem;
+}
+.metric-chart h3 {
+  font-size:.85rem;
+}
+.history-panel .charthead small {
+  font-size:.65rem;
+}
+footer {
+  font-size:.65rem;
+}
+.power-button {
+  display:inline-flex;
+  gap:.5rem;
+  align-items:center;
+  background:#5b292b;
+  color:#ffe1df;
+  border:1px solid #a75454;
+  font-size:.75rem;
+}
+.equipment-details>summary:focus-visible,.heating-panel>summary:focus-visible {
+  outline:2px solid var(--green);
+  outline-offset:3px;
+}
+@media(max-width:28rem) {
+  .condition-tiles .tile {
+    grid-template-columns:auto 1fr;
+    gap:.4rem;
+  }
+  .condition-label {
+    font-size:.7rem;
+  }
+  .condition-value {
+    grid-column:2;
+  }
+  .equipment-details>summary small {
+    max-width:45%;
+    text-align:right;
+  }
+  .system-stats {
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+}
+@media(prefers-reduced-motion:reduce) {
+  .battery-level,.equipment-details>summary::after,.heating-panel>summary::after {
+    transition:none;
+  }
+}
+.timer-heading { justify-content:space-between; }
+.timer-heading > span:first-child { display:flex;align-items:center;gap:.55rem; }
+.electrical-readings { display:flex;flex-wrap:wrap;gap:.35rem 1rem;font-size:clamp(.9rem,1.5vw,1.05rem);font-variant-numeric:tabular-nums; }
+.electrical-readings > span { white-space:nowrap; }
+.electrical-readings small { color:var(--muted);font-size:.72rem; }
+.timer-lines { display:grid;gap:.8rem;margin:auto 0;container-type:inline-size; }
+.timer-line { display:flex;align-items:center;justify-content:space-between;gap:.6rem;color:var(--muted); }
+.timer-line.hidden { display:none; }
+.timer-line + .timer-line { border-top:1px solid var(--border);padding-top:.8rem; }
+.timer-endpoint { display:inline-flex;align-items:center;gap:.35rem;font-size:.8rem;font-variant-numeric:tabular-nums; }
+.timer-value { font-size:clamp(1.1rem,3vw,1.6rem);font-weight:550;letter-spacing:-.04em;font-variant-numeric:tabular-nums;white-space:nowrap; }
+.timer-line.active.charge { color:var(--green); }
+.timer-line.active.discharge { color:var(--amber); }
+@container (max-width:9rem) {
+  .timer-line { display:grid;grid-template-columns:1fr;gap:.25rem; }
+  .timer-value { justify-self:end; }
+}
+</style>
 <main>
-<header><div><div class="brand">WattCycle <span>☀</span> Solar</div><h1>A little closer to the sun.</h1><div class="sub">Your solar controller, at a glance.</div></div><div class="pill" id="connection" role="status">Connecting…</div></header>
-<section id="climate" class="climate hidden" aria-labelledby="climate-name">
-<div class="climate-intro"><div><div class="climate-title"><svg class="climate-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M9 14.7V5a3 3 0 0 1 6 0v9.7a5 5 0 1 1-6 0Z"/><path d="M12 8v9"/><circle cx="12" cy="18" r="1.5" fill="currentColor" stroke="none"/></svg><h2 id="climate-name">Cabana climate</h2></div><small id="climate-frequency">Xiaomi sensor · every 10 minutes</small></div><div class="climate-bottom"><span id="climate-status" class="climate-status" role="status">Connecting</span><small id="climate-updated">First reading pending</small></div></div>
-<div class="climate-metric"><div class="label">TEMPERATURE</div><div class="climate-value"><span id="sensor-temperature">—</span><span class="unit">°C</span></div></div>
-<div class="climate-metric climate-humidity"><div class="label">HUMIDITY</div><div class="climate-value"><span id="sensor-humidity">—</span><span class="unit">%</span></div></div>
-<div class="climate-metric climate-battery"><div class="label">SENSOR BATTERY</div><div class="climate-value"><span id="sensor-battery">—</span><span class="unit">V</span></div><small>Measured voltage</small></div>
-<p id="climate-message" class="climate-message" role="status"></p>
-</section>
+<svg class="svg-library" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><symbol id="i-battery" viewBox="0 0 24 24"><rect x="3" y="6" width="17" height="12" rx="2"/><path d="M22 10v4M7 10v4m4-4v4m4-4v4"/></symbol><symbol id="i-discharge" viewBox="0 0 24 24"><path d="M20 12H4m6-6-6 6 6 6"/></symbol><symbol id="i-charge" viewBox="0 0 24 24"><path d="M4 12h16m-6-6 6 6-6 6"/></symbol><symbol id="i-rest" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol><symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol><symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/></symbol><symbol id="i-energy" viewBox="0 0 24 24"><path d="m13 2-8 12h6l-1 8 9-13h-7z"/></symbol><symbol id="i-temp" viewBox="0 0 24 24"><path d="M9 14V5a3 3 0 0 1 6 0v9a5 5 0 1 1-6 0Z"/><path d="M12 8v10"/></symbol><symbol id="i-drop" viewBox="0 0 24 24"><path d="M12 3S5 11 5 15a7 7 0 0 0 14 0c0-4-7-12-7-12Z"/></symbol><symbol id="i-details" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="8" cy="6" r="2"/><circle cx="16" cy="12" r="2"/><circle cx="10" cy="18" r="2"/></symbol><symbol id="i-heat" viewBox="0 0 24 24"><path d="M6 20c-4-6 4-6 0-12m6 12c-4-6 4-6 0-12m6 12c-4-6 4-6 0-12"/></symbol><symbol id="i-chip" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4m6-4v4M9 18v4m6-4v4M2 9h4m-4 6h4m12-6h4m-4 6h4"/></symbol><symbol id="i-alert" viewBox="0 0 24 24"><path d="m12 3 10 18H2Z"/><path d="M12 9v4m0 4h.01"/></symbol><symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol><symbol id="i-power" viewBox="0 0 24 24"><path d="M12 2v10m-6-7a9 9 0 1 0 12 0"/></symbol></svg>
+<header><div><div class="brand">WattCycle <span>☀</span> Solar</div><h1>A little closer to the sun.</h1></div><div class="pill" id="connection" role="status">Connecting…</div></header>
 <div class="warning hidden" id="warning" role="alert"></div>
-<section id="heating-panel" class="panel heating-panel" aria-labelledby="heating-title">
-<div class="heating-heading"><h2 id="heating-title">Battery heating</h2><span id="heating-state" class="heating-state" role="status">Checking…</span><div class="heating-controls"><button id="heating-arm" type="button" role="switch" aria-checked="false" onclick="setHeating(true)" disabled>Arm</button><button id="heating-disable" class="stop-heating" type="button" onclick="setHeating(false)" disabled>Turn off</button></div></div>
-<div class="heating-facts"><span>ON ≤<strong id="heating-on">5</strong>°C · OFF ≥<strong id="heating-off">10</strong>°C · 5 min</span><span>LOAD: <strong id="heating-output">Unconfirmed</strong></span><details id="heating-access" class="heating-access"><summary>Unlock controls</summary><label>Control key<br><input id="heating-key" type="password" autocomplete="off" oninput="heatingFreshness()"></label></details><a href="https://github.com/hardtomakeanadress/wattcycle-solar-monitor/blob/main/docs/heating.md" target="_blank" rel="noopener noreferrer">Guide</a></div>
-<p id="heating-message" class="heating-message" role="alert" aria-live="polite">Waiting for heating status.</p>
-<p id="heating-request-error" class="heating-error" role="alert"></p>
+<div id="attention" class="notice hidden" role="alert"><svg class="icon " aria-hidden="true"><use href="#i-alert"/></svg><span id="attention-message"></span></div>
+<section class="overview" aria-label="Energy overview">
+<article id="battery-panel" class="tile battery-card hidden" aria-label="Battery charge">
+<div class="tile-heading"><span class="tile-icon"><svg class="icon " aria-hidden="true"><use href="#i-battery"/></svg></span>Battery</div>
+<div class="battery-gauge"><svg viewBox="0 0 128 128" role="img" aria-label="Battery state of charge"><circle class="battery-track" cx="64" cy="64" r="53"/><circle id="battery-level" class="battery-level" cx="64" cy="64" r="53" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100"/></svg><div class="battery-gauge-center"><div class="battery-soc"><span id="battery-soc">—</span><span class="unit">%</span></div><small id="battery-soc-note"></small></div></div>
+<div class="tile-meta"><span>Victron</span><span id="battery-alarms" aria-label="Battery alarms">—</span></div>
+</article>
+<article id="battery-power-tile" class="tile hidden" aria-label="Battery power flow">
+<div class="tile-heading"><span class="tile-icon"><svg class="icon" aria-hidden="true"><use id="battery-flow-icon" href="#i-rest"/></svg></span><span id="battery-power-label">Battery flow</span></div>
+<div class="tile-value"><span id="battery-power">—</span><span id="battery-power-unit" class="unit">W</span></div>
+<div class="electrical-readings" aria-label="Battery voltage and current"><span><span id="battery-flow-voltage">—</span> <small>V</small></span><span><span id="battery-flow-current">—</span> <small>A</small></span></div><div class="tile-meta"><span id="battery-flow" class="state-badge" role="status">Connecting</span></div><span id="battery-direction" class="sr-only"></span>
+</article>
+<article id="battery-time-tile" class="tile hidden" aria-label="Battery timers">
+<div class="tile-heading timer-heading"><span><span class="tile-icon"><svg class="icon" aria-hidden="true"><use href="#i-clock"/></svg></span>Timers</span></div>
+<div class="timer-lines">
+<div id="discharge-timer-row" class="timer-line discharge" aria-label="Time to discharge floor"><span class="timer-endpoint"><svg class="icon" aria-hidden="true"><use href="#i-discharge"/></svg><span id="timer-floor-label">—%</span></span><span id="battery-remaining" class="timer-value">—</span></div>
+<div id="charge-timer-row" class="timer-line charge hidden" aria-label="Time to 100 percent"><span class="timer-endpoint"><svg class="icon" aria-hidden="true"><use id="timer-charge-icon" href="#i-charge"/></svg><span id="timer-charge-label">100%</span></span><span id="battery-charge-remaining" class="timer-value" title="Calculated from average net charging current">—</span></div>
+</div><div id="battery-time-note" class="sr-only"></div>
+</article>
+<article id="solar-tile" class="tile solar-tile" aria-label="Solar charging power">
+<div class="tile-heading"><span class="tile-icon"><svg class="icon " aria-hidden="true"><use href="#i-sun"/></svg></span>Solar charging</div>
+<div class="tile-value"><span id="charge_W">—</span><span class="unit">W</span></div>
+<div class="electrical-readings solar-readings"><span title="Panel input voltage"><small>Panel</small> <span id="panel-voltage">—</span> <small>V</small></span><span title="Controller charging output current"><small>Charge</small> <span id="solar-charge-current">—</span> <small>A</small></span></div>
+<div class="tile-meta"><span id="charge_status">Connecting</span><span class="solar-cycle" title="Energy this solar controller cycle" aria-label="Solar cycle energy"><svg class="icon " aria-hidden="true"><use href="#i-energy"/></svg><span id="today_generation_Wh">—</span> Wh</span></div>
+</article>
 </section>
-<section class="grid" aria-label="Live measurements">
-<div class="card primary"><div class="label">CHARGING POWER</div><div class="value"><span id="charge_W">—</span><span class="unit">W</span></div><small id="charge_status">Waiting for controller</small></div>
-<div class="card"><div class="label">BATTERY VOLTAGE</div><div class="value"><span id="battery_V">—</span><span class="unit">V</span></div><small><span id="controller_estimated_SOC_percent">—</span>% · controller estimate</small></div>
-<div class="card"><div class="label">SOLAR INPUT</div><div class="value"><span id="PV_V">—</span><span class="unit">V</span></div><small>Charge current <span id="charge_A">—</span> A</small></div>
-<div class="card"><div class="label">SOLAR CYCLE ENERGY</div><div class="value"><span id="today_generation_Wh">—</span><span class="unit">Wh</span></div><small>Cycle peak <span id="today_peak_W">—</span> W<br>Resets with morning light; retained overnight.</small></div>
+<p id="battery-message" class="sr-only" role="status"></p>
+<section id="climate" class="conditions hidden" aria-labelledby="climate-name">
+<div class="conditions-heading"><h2 id="climate-name">Cabana climate</h2><small id="climate-status" role="status">Connecting</small></div>
+<div class="condition-tiles">
+<div class="tile"><span class="tile-icon"><svg class="icon " aria-hidden="true"><use href="#i-temp"/></svg></span><span class="condition-label">Temperature</span><div class="condition-value"><span id="sensor-temperature">—</span><span class="unit">°C</span></div></div>
+<div class="tile"><span class="tile-icon"><svg class="icon " aria-hidden="true"><use href="#i-drop"/></svg></span><span class="condition-label">Humidity</span><div class="condition-value"><span id="sensor-humidity">—</span><span class="unit">%</span></div></div>
+</div><p id="climate-message" class="climate-message" role="status"></p>
 </section>
+<div class="detail-stack">
+<details id="battery-details" class="equipment-details hidden"><summary><svg class="icon " aria-hidden="true"><use href="#i-battery"/></svg>Battery details<small id="battery-updated" role="status">Connecting</small></summary><div class="detail-body"><div class="detail-grid">
+<div class="detail-metric">Voltage<strong><span id="battery-voltage">—</span> V</strong></div><div class="detail-metric">Current<strong><span id="battery-current">—</span> A</strong></div><div class="detail-metric">Used since full<strong><span id="battery-consumed">—</span> Ah</strong></div>
+</div><p id="battery-aux" class="detail-note"></p></div></details>
+<details id="heating-panel" class="panel heating-panel" aria-labelledby="heating-title"><summary class="heating-heading"><svg class="icon " aria-hidden="true"><use href="#i-heat"/></svg><h2 id="heating-title">Battery heating</h2><span id="heating-state" class="heating-state" role="status">Checking…</span></summary><div class="detail-body">
+<div class="heating-controls"><button id="heating-arm" type="button" role="switch" aria-checked="false" onclick="setHeating(true)" disabled>Arm</button><button id="heating-disable" class="stop-heating" type="button" onclick="setHeating(false)" disabled>Turn off</button></div>
+<div class="heating-facts"><span>ON ≤<strong id="heating-on">—</strong>°C · OFF ≥<strong id="heating-off">—</strong>°C</span><span>LOAD: <strong id="heating-output">Unconfirmed</strong></span><details id="heating-access" class="heating-access"><summary>Unlock controls</summary><label>Control key<br><input id="heating-key" type="password" autocomplete="off" oninput="heatingFreshness()"></label></details><a href="https://github.com/hardtomakeanadress/wattcycle-solar-monitor/blob/main/docs/heating.md" target="_blank" rel="noopener noreferrer">Guide</a></div>
+<p id="heating-message" class="heating-message" role="alert" aria-live="polite">Checking…</p><p id="heating-request-error" class="heating-error" role="alert"></p>
+</div></details>
+<details id="sensor-details" class="equipment-details hidden"><summary><svg class="icon " aria-hidden="true"><use href="#i-temp"/></svg>Sensor details<small id="climate-updated"></small></summary><div class="detail-body"><div class="detail-metric">Sensor battery<strong><span id="sensor-battery">—</span> V</strong></div><p id="climate-frequency" class="detail-note"></p></div></details>
+</div>
 <section class="panel history-panel" aria-label="Measurement history">
-<div class="charthead"><h2>Explore your history</h2><small>Solar: 5 min · Climate: 10 min</small></div>
+<div class="charthead"><h2>History</h2><small id="history-cadence"></small></div>
 <div class="history-controls">
 <label>Time range<select id="range" onchange="rangeChanged()"><option value="900">Last 15 minutes</option><option value="3600">Last hour</option><option value="21600">Last 6 hours</option><option value="86400" selected>Last 24 hours</option><option value="604800">Last 7 days</option><option value="2592000">Last 30 days</option><option value="31557600">Last year</option><option value="all">All saved history</option><option value="custom">Custom dates</option><option id="follow-option" value="follow" hidden>Latest at current zoom</option></select></label>
 <label>Measurements<select id="metric" onchange="renderHistory()"><option value="overview">Overview: charging, battery &amp; solar</option><option value="all">Every metric</option></select></label>
@@ -56,24 +612,27 @@
 <p id="history-window" class="history-note" aria-live="polite"></p>
 <div id="history-storage-warning" class="warning hidden" role="status"></div>
 <div id="history-message" class="history-message" role="status">Loading history…</div>
-<p id="history-coverage" class="history-note"></p>
+
 <div id="charts" class="charts"></div>
-<details class="history-note"><summary>Chart help</summary><p>Move across or tap a chart to inspect the nearest reading. Earlier and Later move by one window. Latest follows incoming readings at the current zoom. Times use your browser’s local timezone. Solar readings are normally collected every 5 minutes and climate readings every 10 minutes; climate readings occur every 5 minutes while heating is armed. Older solar history keeps its original one-minute detail; all readings are plotted at their actual times. Zoom cannot reveal measurements between readings. Climate history may take about 5 minutes to appear after a live reading.</p>
+<details class="history-note"><summary>Details &amp; chart help</summary><p id="history-coverage" class="history-note"></p><p>Move across or tap a chart to inspect the nearest reading. Earlier and Later move by one window. Latest follows incoming readings at the current zoom. Times use your browser’s local timezone. Solar readings are normally collected every 5 minutes and climate readings every 10 minutes; climate readings occur every 5 minutes while heating is armed. Older solar history keeps its original one-minute detail; all readings are plotted at their actual times. Zoom cannot reveal measurements between readings. Climate history may take about 5 minutes to appear after a live reading.</p>
 <p class="history-note">Solar input is panel voltage; charging power is the controller’s output to the battery. The controller’s solar-cycle energy and peak reset with morning light and remain visible overnight, including after midnight. Long ranges show representative readings, so brief peaks and state changes may be omitted. All saved readings, including older minute readings, stay in storage.</p></details>
 </section>
-<div class="panels"><section class="panel"><h2>Controller status</h2><div class="row"><span>Charge stage</span><strong id="stage">—</strong></div><div class="row"><span>Controller temperature</span><strong id="temp">—</strong></div><div class="row"><span>Battery temperature field</span><strong id="batterytemp">—</strong></div><div class="row"><span>DC load</span><strong id="load">—</strong></div><div class="row"><span>Faults</span><strong id="faults">—</strong></div></section></div>
-<section class="panel system-panel" aria-labelledby="system-title">
-<div class="system-heading"><h2 id="system-title">Raspberry Pi</h2><small id="system-updated" role="status">Loading system information…</small></div>
-<p class="system-model" id="system-model">The computer behind your solar monitor.</p>
+<div class="equipment-group"><details id="controller-details" class="equipment-details"><summary><svg class="icon " aria-hidden="true"><use href="#i-chip"/></svg>Controller details<small id="stage">—</small></summary><div class="detail-body"><div class="detail-grid">
+<div class="detail-metric">Controller voltage<strong><span id="battery_V">—</span> V</strong></div><div class="detail-metric">Controller SOC estimate<strong><span id="controller_estimated_SOC_percent">—</span>%</strong></div><div class="detail-metric">Panel voltage<strong><span id="PV_V">—</span> V</strong></div><div class="detail-metric">Charge current<strong><span id="charge_A">—</span> A</strong></div><div class="detail-metric">Cycle peak<strong><span id="today_peak_W">—</span> W</strong></div>
+<div class="detail-metric">Controller temperature<strong id="temp">—</strong></div><div class="detail-metric">Battery temperature field<strong id="batterytemp">—</strong></div><div class="detail-metric">DC load<strong id="load">—</strong></div><div class="detail-metric">Faults<strong id="faults">—</strong></div>
+</div></div></details><details class="equipment-details system-panel" aria-labelledby="system-title"><summary><svg class="icon" aria-hidden="true"><use href="#i-chip"/></svg><span id="system-title">Raspberry Pi</span><small id="system-updated" role="status">Connecting</small></summary><div class="detail-body">
+<p class="system-model" id="system-model"></p>
 <div class="system-stats" id="system-stats">
-<div class="system-stat"><div class="label">CPU TEMPERATURE</div><div class="system-value" id="system-temperature">—</div><small>Measured on the Pi</small></div>
+<div class="system-stat"><div class="label">CPU TEMPERATURE</div><div class="system-value" id="system-temperature">—</div></div>
 <div class="system-stat"><div class="label">AVAILABLE MEMORY</div><div class="system-value" id="system-memory">—</div><small id="system-memory-total">Total memory —</small></div>
 <div class="system-stat"><div class="label">FREE STORAGE</div><div class="system-value" id="system-storage">—</div><small id="system-storage-total">History filesystem</small></div>
-<div class="system-stat"><div class="label">UPTIME</div><div class="system-value" id="system-uptime">—</div><small>Since the Pi last started</small></div>
+<div class="system-stat"><div class="label">UPTIME</div><div class="system-value" id="system-uptime">—</div></div>
 </div>
-<p class="system-note" id="system-message" role="status">System information refreshes every 30 seconds.</p>
-</section>
-<footer><span id="identity">WattCycle · M-2430N</span><span id="updated">Waiting for first reading</span></footer>
+<p class="system-note" id="system-message" role="status"></p>
+</div></details>
+</div>
+<footer><span id="identity">WattCycle · M-2430N</span><p><button id="shutdown-button" type="button" onclick="shutdownPi()" class="power-button"><svg class="icon " aria-hidden="true"><use href="#i-power"/></svg>Shut down Pi</button></p><span id="updated"></span></footer>
+<p class="system-note" id="shutdown-message" role="status" aria-live="polite"></p>
 </main>
 <script>
 const $ = id => document.getElementById(id);
@@ -82,6 +641,32 @@ let status = null, receivedAt = 0, connected = false, historyData = null, histor
 let followSeconds = null, fixedWindow = null, historyLoading = false, rangeDraft = false;
 let systemData = null, systemReceivedAt = 0, systemConnected = false;
 const MIN_WINDOW = 300;
+
+let shutdownBusy = false;
+async function shutdownPi() {
+  if (shutdownBusy) return;
+  shutdownBusy = true;
+  $('shutdown-button').disabled = true;
+  put('shutdown-message', 'Requesting shutdown…');
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 10000);
+  try {
+    const response = await fetch('/api/shutdown', {method:'POST', cache:'no-store', signal:controller.signal,
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({shutdown:true})});
+    if (!response.ok) {
+      shutdownBusy = false;
+      throw new Error(response.status === 403 ? 'Shutdown request rejected. Refresh the page.' : response.status === 409
+        ? 'Shutdown already requested, or heating must be turned off first.' : 'Shutdown rejected or unconfirmed. Check the Pi.');
+    }
+    put('shutdown-message', 'Shutdown scheduled in 10 seconds. The website will go offline.');
+  } catch (error) {
+    put('shutdown-message', `${error.message} Do not retry until you have checked the Pi.`);
+  } finally {
+    clearTimeout(timer);
+    $('shutdown-button').disabled = shutdownBusy;
+  }
+}
 
 async function getJSON(url) {
   const controller = new AbortController();
@@ -97,11 +682,37 @@ async function getJSON(url) {
 
 function elapsed() { return Math.max(0, (performance.now() - receivedAt) / 1000); }
 
+function timerDuration(minutes) {
+  if (!Number.isFinite(minutes) || minutes < 0) return '—';
+  minutes = Math.ceil(minutes);
+  return minutes >= 1440 ? `${Math.floor(minutes/1440)}d ${Math.floor(minutes%1440/60)}h`
+    : minutes >= 60 ? `${Math.floor(minutes/60)}h ${minutes%60}m` : `${minutes}m`;
+}
+
+function renderTimers(shuntStale, current, dischargeMinutes) {
+  const timers = status?.timers, settings = timers?.settings;
+  const configured = !!timers?.configured && !!settings;
+  $('charge-timer-row').classList.remove('hidden');
+  const discharging = !shuntStale && current < -.05 && Number.isFinite(dischargeMinutes);
+  $('discharge-timer-row').classList.toggle('active', discharging);
+  put('battery-remaining', discharging ? timerDuration(dischargeMinutes) : '—');
+  put('timer-floor-label', configured ? `${settings.discharge_floor_percent}%` : '—%');
+  put('timer-charge-label', `${timers?.target_percent ?? 100}%`);
+  const charging = !shuntStale && timers?.state === 'charging' && Number.isFinite(timers.charge_minutes);
+  const full = !shuntStale && timers?.state === 'full';
+  $('charge-timer-row').classList.toggle('active', charging || full);
+  put('battery-charge-remaining', charging ? `≈ ${timerDuration(timers.charge_minutes)}` : full ? '✓' : timers?.state === 'warming' && !shuntStale ? '…' : '—');
+  $('timer-charge-icon').setAttribute('href', full ? '#i-check' : '#i-charge');
+  $('charge-timer-row').setAttribute('aria-label', full ? '100 percent reached' : 'Calculated time to 100 percent');
+}
+
 function freshness() {
+  batteryFreshness();
   heatingFreshness();
   historyStorageStatus();
   sensorFreshness();
   systemFreshness();
+  attentionStatus();
   const reading = status?.reading;
   // Use the Pi's reported age; the phone/laptop clock may be wrong.
   const age = status?.age_seconds == null ? Infinity : status.age_seconds + elapsed();
@@ -115,6 +726,77 @@ function freshness() {
     const frequency = interval === 60 ? 'every minute' : interval % 60 === 0 ? `every ${interval / 60} minutes` : `every ${interval} seconds`;
     put('updated', `Last reading ${new Date(reading.timestamp_utc).toLocaleString()} · ${frequency}`);
   }
+  const solarBad = bad || !Number.isFinite(reading?.charge_W);
+  $('solar-tile').classList.toggle('stale', solarBad);
+  $('solar-tile').classList.toggle('idle', !solarBad && reading.charge_W <= 0);
+  const solarInterval = status?.poll_interval_seconds;
+  const climateInterval = status?.sensor?.poll_interval_seconds;
+  put('history-cadence', [Number.isFinite(solarInterval) ? `Solar · ${solarInterval/60} min` : '',
+    status?.sensor?.enabled && Number.isFinite(climateInterval) ? `Climate · ${climateInterval/60} min` : ''].filter(Boolean).join(' / '));
+}
+
+function attentionStatus() {
+  const warnings = [];
+  const shunt = status?.shunt;
+  if (shunt?.enabled) {
+    const age = shunt.age_seconds == null ? Infinity : shunt.age_seconds + elapsed();
+    if (shunt.reading?.alarm_bits) warnings.push(shunt.reading.alarms?.join(' · ') || 'Battery alarm');
+    if (connected && (shunt.error || !shunt.reading || age > shunt.stale_after_seconds)) warnings.push(shunt.error || 'Battery data unavailable');
+  }
+  const h = status?.heating;
+  if (h?.available && (h.armed || h.alarm) && $('heating-panel').classList.contains('heating-alarm')) {
+    warnings.push(h.alarm || 'Heating needs attention');
+  }
+  if (status?.reading?.fault_bits) warnings.push('Controller fault: ' + status.reading.fault_bits);
+  $('attention').classList.toggle('hidden', !warnings.length);
+  put('attention-message', warnings.join(' · '));
+}
+
+function batteryFreshness() {
+  const shunt = status?.shunt;
+  const tileIds = ['battery-panel', 'battery-power-tile', 'battery-time-tile'];
+  for (const id of [...tileIds, 'battery-details']) $(id).classList.toggle('hidden', !shunt?.enabled);
+  if (!shunt?.enabled) return;
+  const r = shunt.reading;
+  const age = shunt.age_seconds == null ? Infinity : shunt.age_seconds + elapsed();
+  const stale = !connected || !r || !!shunt.error || age > shunt.stale_after_seconds;
+  const alarm = !!r?.alarm_bits;
+  const current = r?.current_A;
+  const direction = !Number.isFinite(current) ? 'Waiting for data' : current > .05 ? 'Charging' : current < -.05 ? 'Discharging' : 'At rest';
+  const flow = direction === 'Charging' ? 'charge' : direction === 'Discharging' ? 'discharge' : 'rest';
+  for (const id of tileIds) {
+    const tile = $(id);
+    tile.classList.toggle('stale', stale);
+    tile.classList.toggle('alarm', alarm);
+    tile.classList.toggle('charging', id === 'battery-power-tile' && flow === 'charge');
+    tile.classList.toggle('discharging', id === 'battery-power-tile' && flow === 'discharge');
+    tile.classList.toggle('idle', id === 'battery-power-tile' && flow === 'rest');
+  }
+  $('battery-flow-icon').setAttribute('href', '#i-' + (stale ? 'rest' : flow));
+  put('battery-flow', stale ? r ? 'Last known reading' : 'Connecting' : alarm ? 'Battery alarm' : direction);
+  const soc = r?.soc_percent;
+  put('battery-soc', Number.isFinite(soc) ? soc.toFixed(1) : '—');
+  put('battery-soc-note', r && soc == null ? 'Not synchronized' : '');
+  $('battery-level').setAttribute('stroke-dashoffset', Number.isFinite(soc) ? 100-Math.max(0,Math.min(100,soc)) : 100);
+  put('battery-voltage', Number.isFinite(r?.battery_V) ? r.battery_V.toFixed(2) : '—');
+  put('battery-current', Number.isFinite(current) ? current.toFixed(2) : '—');
+  put('battery-flow-voltage', Number.isFinite(r?.battery_V) ? r.battery_V.toFixed(2) : '—');
+  put('battery-flow-current', Number.isFinite(current) ? Math.abs(current).toFixed(2) : '—');
+  const power = Number.isFinite(r?.net_power_W) ? Math.abs(r.net_power_W) : null;
+  put('battery-power', power == null ? '—' : power >= 1000 ? (power/1000).toFixed(2) : Math.round(power));
+  put('battery-power-unit', power >= 1000 ? 'kW' : 'W');
+  put('battery-power-label', 'Battery flow');
+  put('battery-direction', stale ? 'Awaiting a fresh broadcast' : direction === 'Charging' ? 'Energy flowing into storage' : direction === 'Discharging' ? 'Energy flowing out of storage' : direction === 'At rest' ? 'Battery flow is near zero' : 'Waiting for a measurement');
+  const mins = r?.time_to_go_minutes;
+  put('battery-remaining', Number.isFinite(mins) && current < -.05 ? mins >= 1440 ? `${Math.floor(mins/1440)}d ${Math.floor(mins%1440/60)}h` : mins >= 60 ? `${Math.floor(mins/60)}h ${mins%60}m` : `${mins}m` : '—');
+  put('battery-time-note', stale ? 'Last known' : current < -.05 && Number.isFinite(mins) ? 'Shunt estimate' : direction === 'Charging' ? 'Charging' : direction === 'At rest' ? 'At rest' : 'Unavailable');
+  renderTimers(stale, current, mins);
+  put('battery-consumed', Number.isFinite(r?.consumed_Ah) ? Math.abs(r.consumed_Ah).toFixed(1) : '—');
+  put('battery-alarms', !r ? '—' : stale ? 'Last known' : alarm ? `${r.alarms?.length || 1} alarms` : 'No alarms');
+  put('battery-aux', Number.isFinite(r?.temperature_C) ? `${r.temperature_C.toFixed(1)} °C · battery sensor` : Number.isFinite(r?.starter_V) ? `${r.starter_V.toFixed(2)} V · starter battery` : Number.isFinite(r?.midpoint_V) ? `${r.midpoint_V.toFixed(2)} V · midpoint` : '');
+  put('battery-updated', !r ? 'Connecting' : stale ? 'Last known' : `${Math.floor(age)}s ago`);
+  put('battery-message', [alarm ? r.alarms?.join(' · ') || 'Alarm reported by the shunt.' : '',
+    !connected ? 'Dashboard connection lost. Values shown are the last received readings.' : shunt.error || (stale && r ? 'No fresh broadcast. Disconnect VictronConnect if it is connected to the shunt.' : '')].filter(Boolean).join(' '));
 }
 
 let heatingRequestBusy = false, heatingAwaiting = false;
@@ -127,6 +809,7 @@ function heatingFreshness() {
   const alarm = lost || !!h?.alarm || badSensor || cold || !h?.available;
   $('heating-panel').classList.toggle('heating-alarm', alarm);
   $('heating-panel').classList.toggle('heating-active', !alarm && h?.phase === 'heating');
+  if (alarm || h?.armed || h?.pending) $('heating-panel').open = true;
   const names = {disabled:'Disabled', arming:'Arming — waiting for fresh data', disarming:'Disabling — verifying OFF', waiting:'Armed · waiting', heating:'Heating', alarm:'ALARM', unavailable:'Unavailable'};
   put('heating-state', lost ? 'ALARM · connection lost' : badSensor ? 'ALARM · temperature unavailable' : cold && !h?.alarm ? 'Cold enclosure · charging risk' : names[h?.phase] || 'Unavailable');
   put('heating-message', lost ? 'Cannot confirm heater state. The Pi may still be running heating; inspect locally if needed.'
@@ -136,8 +819,8 @@ function heatingFreshness() {
   $('heating-message').classList.toggle('hidden', !alarm && !!h?.installation_ready && ['disabled','waiting','heating'].includes(h?.phase));
   const currentOutput = h?.owns_load || h?.armed || h?.alarm ? h.output_on : status?.reading?.load_on;
   put('heating-output', lost || status?.stale || status?.error || currentOutput == null ? 'Unconfirmed' : currentOutput ? 'ON' : 'OFF');
-  put('heating-on', h?.on_C ?? 5);
-  put('heating-off', h?.off_C ?? 10);
+  put('heating-on', h?.on_C ?? '—');
+  put('heating-off', h?.off_C ?? '—');
   const unlocked = !!$('heating-key').value.trim() && h?.control_configured && !lost && h?.available && !heatingRequestBusy;
   $('heating-arm').disabled = !unlocked || !h?.installation_ready || h?.armed || h?.pending;
   $('heating-arm').setAttribute('aria-checked', h?.armed ? 'true' : 'false');
@@ -187,17 +870,18 @@ function historyStorageStatus() {
 function sensorFreshness() {
   const sensor = status?.sensor;
   $('climate').classList.toggle('hidden', !sensor?.enabled);
+  $('sensor-details').classList.toggle('hidden', !sensor?.enabled);
   if (!sensor?.enabled) return;
   put('climate-name', sensor.name);
-  put('climate-frequency', `Xiaomi sensor · every ${sensor.poll_interval_seconds === 300 ? '5 minutes' : '10 minutes'}`);
+  put('climate-frequency', Number.isFinite(sensor.poll_interval_seconds) ? `Sample interval · ${sensor.poll_interval_seconds/60} min` : '');
   const reading = sensor.reading;
   const age = sensor.age_seconds == null ? Infinity : sensor.age_seconds + elapsed();
   const bad = !connected || !reading || !!sensor.error || sensor.stale || age > sensor.stale_after_seconds;
   $('climate').classList.toggle('stale', bad);
   put('climate-status', !connected ? 'Offline' : !reading ? (sensor.error ? 'Unavailable' : 'Connecting') : bad ? 'Last known' : 'Live');
-  put('sensor-temperature', reading ? reading.temperature_C.toFixed(1) : '—');
-  put('sensor-humidity', reading ? reading.humidity_percent : '—');
-  put('sensor-battery', reading ? reading.battery_V.toFixed(3) : '—');
+  put('sensor-temperature', Number.isFinite(reading?.temperature_C) ? reading.temperature_C.toFixed(1) : '—');
+  put('sensor-humidity', Number.isFinite(reading?.humidity_percent) ? reading.humidity_percent : '—');
+  put('sensor-battery', Number.isFinite(reading?.battery_V) ? reading.battery_V.toFixed(3) : '—');
   const ago = age < 60 ? 'just now' : age < 3600 ? `${Math.floor(age/60)} min ago` : age < 86400 ? `${Math.floor(age/3600)} h ago` : `${Math.floor(age/86400)} d ago`;
   put('climate-updated', reading ? `Read ${ago}` : 'First reading pending');
   put('climate-message', !connected ? 'Dashboard connection lost. Showing the last received sensor reading.'
@@ -215,8 +899,10 @@ async function refresh() {
     connected = true;
     const r = status.reading;
     if (r) {
-      for (const key of ['charge_W', 'battery_V', 'PV_V', 'charge_A', 'today_generation_Wh', 'today_peak_W', 'controller_estimated_SOC_percent']) put(key, r[key]);
-      put('charge_status', r.charge_status + ' charging stage');
+      for (const key of ['charge_W', 'battery_V', 'PV_V', 'charge_A', 'today_generation_Wh', 'today_peak_W', 'controller_estimated_SOC_percent']) put(key, Number.isFinite(r[key]) ? r[key] : '—');
+      put('panel-voltage', Number.isFinite(r.PV_V) ? r.PV_V.toFixed(1) : '—');
+      put('solar-charge-current', Number.isFinite(r.charge_A) ? r.charge_A.toFixed(2) : '—');
+      put('charge_status', typeof r.charge_status === 'string' ? r.charge_status.charAt(0).toUpperCase() + r.charge_status.slice(1) : '—');
       put('stage', r.charge_status);
       put('temp', r.controller_C + ' °C');
       put('batterytemp', r.battery_temperature_field_C + ' °C');
@@ -227,9 +913,10 @@ async function refresh() {
   } catch (error) {
     connected = false;
   } finally {
-    freshness();
-    // Schedule after completion so slow requests never overlap.
-    setTimeout(refresh, 5000);
+    try { freshness(); } finally {
+      // A rendering failure must not permanently stop status polling.
+      setTimeout(refresh, 5000);
+    }
   }
 }
 
@@ -247,7 +934,7 @@ function systemFreshness() {
   const stale = !systemConnected || !Number.isFinite(age) || age > 90;
   $('system-stats').classList.toggle('stale', stale);
   put('system-updated', !systemData ? 'System information unavailable' : stale ? 'Last known system information' : 'Updated ' + new Date(systemData.timestamp_utc).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}));
-  put('system-message', stale ? 'System information unavailable. Retrying automatically; solar monitoring continues separately.' : 'System information refreshes every 30 seconds. Unavailable values appear as —.');
+  put('system-message', stale ? 'System information unavailable. Retrying…' : '');
   $('system-message').classList.toggle('warning-text', stale);
 }
 async function refreshSystem() {

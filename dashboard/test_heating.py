@@ -149,6 +149,36 @@ class HeatingTest(unittest.TestCase):
         self.command.assert_called_once_with(True)
         self.assertFalse(self.h.owned)
 
+    def test_pending_disable_blocks_manual_on(self):
+        self.h.request(False)
+        with self.assertRaisesRegex(RuntimeError, 'owns LOAD'):
+            self.h.manual(True, self.command)
+        self.command.assert_not_called()
+        self.h.step()
+        self.command.assert_called_once_with(False)
+
+    def test_arm_cannot_race_manual_off(self):
+        def off(enabled):
+            with self.assertRaisesRegex(ValueError, 'busy'):
+                self.h.request(True)
+            return {'load_on': enabled}
+        self.h.manual(False, off)
+        self.h.step()
+        self.assertFalse(self.h.armed)
+        self.assertIsNone(self.h.intent)
+
+    def test_verified_off_survives_failed_state_save(self):
+        self.arm()
+        self.sample_at(4, 1001)
+        with patch.object(self.h, 'save', side_effect=OSError('disk full')), self.assertLogs(level='ERROR'):
+            result = self.h.manual(False, self.command)
+        self.assertFalse(result['load_on'])
+        self.assertFalse(self.h.output)
+        self.assertFalse(self.h.owned)
+        self.assertFalse(self.h.armed)
+        self.assertIn('storage failed', self.h.alarm)
+        self.assertIn('OFF verified', self.h.reason)
+
     def test_disable_cancels_pending_arm_and_clears_alarm_after_verified_off(self):
         self.h.request(True)
         self.h.request(False)

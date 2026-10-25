@@ -51,6 +51,19 @@ async function main() {
       throw error;
     }
     assert.equal(await page.locator('#range').inputValue(),'86400');
+    assert.equal(await page.locator('#timer-settings-open, #timer-settings').count(), 0);
+    assert.equal(await page.locator('#panel-voltage').textContent(),
+      await page.evaluate(()=>status.reading.PV_V.toFixed(1)));
+    assert.equal(await page.locator('#solar-charge-current').textContent(),
+      await page.evaluate(()=>status.reading.charge_A.toFixed(2)));
+    if (await page.evaluate(()=>status.shunt?.enabled)) {
+      assert(await page.locator('#charge-timer-row').isVisible());
+      assert(await page.locator('#discharge-timer-row').isVisible());
+      assert.equal(await page.locator('#battery-flow-voltage').textContent(),
+        await page.evaluate(()=>status.shunt.reading.battery_V.toFixed(2)));
+      assert.equal(await page.locator('#battery-flow-current').textContent(),
+        await page.evaluate(()=>Math.abs(status.shunt.reading.current_A).toFixed(2)));
+    }
     assert.equal(await page.locator('.metric-chart svg').count(),3);
     await page.waitForFunction(()=>!!systemData && systemConnected);
     assert.equal(await page.locator('#system-model').textContent(), await page.evaluate(()=>systemData.model || 'Monitor computer'));
@@ -174,6 +187,7 @@ async function main() {
       return route.fulfill({status:202,json:{heating:heatingFixture.heating}});
     });
     await page.waitForFunction(()=>status?.heating?.installation_ready);
+    if (!await page.locator('#heating-panel').evaluate(el=>el.open)) await page.locator('#heating-panel > summary').click();
     await page.locator('#heating-access summary').click();
     await page.locator('#heating-key').fill('fixture-only-key');
     await page.locator('#heating-arm').click();

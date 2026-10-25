@@ -83,14 +83,19 @@ class Heating:
     def request(self, armed):
         if type(armed) is not bool:
             raise ValueError('armed must be a boolean')
-        with self.lock:
-            if self.stop.is_set():
-                raise ValueError('Service is stopping')
-            if armed and not self.ready:
-                raise ValueError('Installation is not confirmed; heating remains disabled')
-            if armed and (self.armed or self.intent is True):
-                return  # Idempotent requests never reset the maximum-run timer.
-            self.intent = armed
+        if not self.operation.acquire(blocking=False):
+            raise ValueError('Heating control is busy; retry after the current operation')
+        try:
+            with self.lock:
+                if self.stop.is_set():
+                    raise ValueError('Service is stopping')
+                if armed and not self.ready:
+                    raise ValueError('Installation is not confirmed; heating remains disabled')
+                if armed and (self.armed or self.intent is True):
+                    return  # Idempotent requests never reset the maximum-run timer.
+                self.intent = armed
+        finally:
+            self.operation.release()
         self.wake.set()
 
     def output_command(self, enabled):
@@ -129,8 +134,6 @@ class Heating:
         try:
             result = self.output_command(False)
             self.publish(owned=False, phase='disabled', alarm=None, reason='Heating disabled; LOAD OFF verified.')
-            self.save()
-            return result
         except Exception:
             logging.exception('Disabling heating failed')
             self.publish(output=None, owned=True, phase='alarm', alarm='Could not confirm heating disabled.',
@@ -139,6 +142,14 @@ class Heating:
                 self.save()
             except Exception:
                 logging.exception('Saving heating disable failure failed')
+            return None
+        try:
+            self.save()
+        except Exception:
+            logging.exception('Saving verified heating OFF failed')
+            self.publish(phase='alarm', alarm='Heating state storage failed.',
+                         reason='LOAD OFF verified. Heating state storage failed; inspect storage.')
+        return result
 
     def step(self):
         with self.operation:
@@ -217,7 +228,7 @@ class Heating:
         if not self.operation.acquire(blocking=False):
             raise RuntimeError('Heating control is busy; no manual command sent')
         try:
-            if enabled and (self.owned or self.armed or self.intent is True):
+            if enabled and (self.owned or self.armed or self.intent is not None):
                 raise RuntimeError('Heating owns LOAD. Disable heating before manual ON.')
             if not enabled and (self.owned or self.armed or self.intent is not None):
                 with self.lock:

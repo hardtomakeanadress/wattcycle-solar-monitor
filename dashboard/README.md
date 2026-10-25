@@ -3,6 +3,24 @@
 See the [project README](../README.md) for setup and
 [deployment guide](../docs/deployment.md) for automatic startup and backups.
 
+`victron_shunt.py` optionally listens for Victron SmartShunt Instant Readout
+broadcasts using existing BlueZ tools and Linux kernel AES (`AF_ALG`). Configure
+`VICTRON_SHUNT_ADDRESS` and save the 32-hex-digit advertisement key as private
+mode 0600 `victron.key` beside the database, or set `VICTRON_SHUNT_KEY_FILE`.
+The key never appears in the page, status API or process arguments. No packages,
+pairing, GATT writes or battery-setting changes are needed. The five-second
+collector is independent of solar and climate collection. Only changed broadcast
+frames refresh the measurement timestamp; startup ignores the old cached frame.
+The battery panel marks readings stale after 30 seconds and shows shunt alarms.
+The new `/api/status.shunt` object provides measured voltage, signed current,
+state of charge, consumed Ah, estimated time to the configured discharge floor,
+and optional auxiliary readings. Net battery power is calculated as voltage ×
+current; positive is charging. Unavailable fields stay null, including SOC
+before synchronization. These are live readings held in memory; shunt history
+is not recorded in this release. Existing solar/climate history is unchanged.
+Disconnect VictronConnect to allow measurement broadcasting. Format source:
+[Victron Extra Manufacturer Data](https://communityarchive.victronenergy.com/storage/attachments/extra-manufacturer-data-2022-12-14.pdf).
+
 `server.py` runs a single collector thread. It launches `read_controller.py`
 every five minutes; each cycle drains all pending solar and climate readings
 into one SQLite transaction, even when the controller read fails. Live values
@@ -125,3 +143,31 @@ with synchronous FULL is unchanged by the batching. A normal stop
 power loss can lose readings since the last successful commit, normally about
 five minutes, longer if storage is failing. The project does not promise
 protection against failing hardware or replace an off-device backup.
+
+
+## Battery timers
+
+The compact timer card shows the shunt's native time to its configured discharge
+floor and a separate calculated time to **100%**. Direction icons distinguish
+both rows; `≈` identifies the calculated charging value. Both timers stay visible;
+there are no display switches or timer settings dialog.
+
+`charge_timer.py` receives only fresh, changed shunt advertisements. It uses a
+three-minute time-weighted average of net positive battery current, configured Ah capacity,
+reported SOC and the configured charge-efficiency factor. A discharge or radio
+gap resets the average. Charging ETA waits for fresh samples after startup,
+pauses when charging stops, and disappears for stale/unknown data. A full SOC
+shows a checkmark. Target charge is always 100%; it is not user-adjustable.
+
+The private `charge-timer.json` beside the history database contains verified
+`capacity_Ah`, `charge_efficiency_percent` and `discharge_floor_percent`.
+Legacy display preferences are ignored.
+Provision hardware metadata from actual shunt readback; do not guess it.
+Cabana's metadata was read on 25 October 2026 (300 Ah, 95% efficiency, 30% floor).
+If these hardware settings are changed separately, refresh that metadata.
+`/api/status.timers` identifies the ETA source as `calculated`. There is no
+writable timer endpoint; this module cannot change the shunt's floor or capacity.
+
+This is a projection at the observed net current, not a solar-weather forecast.
+It does not model charging-current taper, and an uncalibrated SOC affects its
+accuracy. It does not replace the shunt's full-charge synchronization.

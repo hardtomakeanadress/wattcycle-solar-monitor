@@ -65,7 +65,8 @@ class DashboardTest(unittest.TestCase):
              self.assertLogs(level='ERROR'):
             server.poll_once()
         self.assertEqual(server.STATE['reading'], self.reading)
-        self.assertIn('could not save history', server.snapshot()['error'])
+        self.assertIsNone(server.snapshot()['error'])
+        self.assertIn('could not save history', server.snapshot()['history']['error'])
         with patch.object(server.subprocess, 'run', return_value=self.result):
             server.poll_once()
         self.assertIsNone(server.STATE['error'])

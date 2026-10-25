@@ -69,7 +69,7 @@ rejects overlapping commands. The separate heating UI uses authenticated control
 
 The dashboard heating feature remains disabled pending the owner’s heater/sensor
 installation. `HEATING_INSTALLATION_READY` is not set. See the
-[heating operating rules and control key](../docs/heating.md). Eight 12 V / 100 Ah
+[heating operating rules and control key](../docs/heating.md). Six 12 V / 100 Ah
 WattCycle batteries are recorded; the exact variant and bank wiring remain unconfirmed.
 
 ### Host inventory
