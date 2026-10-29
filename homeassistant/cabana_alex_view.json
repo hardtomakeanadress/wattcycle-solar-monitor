@@ -1,0 +1,454 @@
+{
+  "title": "Cabana Alex",
+  "path": "cabana-alex",
+  "type": "sections",
+  "max_columns": 3,
+  "dense_section_placement": false,
+  "sections": [
+    {
+      "type": "grid",
+      "cards": [
+        {
+          "type": "heading",
+          "heading": "Battery & solar",
+          "icon": "mdi:battery",
+          "heading_style": "title"
+        },
+        {
+          "type": "conditional",
+          "conditions": [
+            {
+              "entity": "sensor.cabana_alex_important_events",
+              "state_not": "0"
+            }
+          ],
+          "card": {
+            "type": "markdown",
+            "content": "**Important faults**\n{% for e in state_attr('sensor.cabana_alex_important_events', 'active') or [] %}\n- {{ e.message }}\n{% endfor %}"
+          }
+        },
+        {
+          "type": "gauge",
+          "entity": "sensor.cabana_alex_smartshunt_soc",
+          "name": "Battery state of charge",
+          "min": 0,
+          "max": 100,
+          "needle": true,
+          "severity": {
+            "red": 0,
+            "yellow": 30,
+            "green": 50
+          },
+          "grid_options": {
+            "columns": 12,
+            "rows": 3
+          }
+        },
+        {
+          "type": "sensor",
+          "entity": "sensor.cabana_alex_charging_power",
+          "name": "Solar charging power",
+          "graph": "line",
+          "hours_to_show": 24,
+          "detail": 2,
+          "grid_options": {
+            "columns": 6,
+            "rows": 2
+          }
+        },
+        {
+          "type": "sensor",
+          "entity": "sensor.cabana_alex_smartshunt_net_power",
+          "name": "Net battery power",
+          "graph": "line",
+          "hours_to_show": 24,
+          "detail": 2,
+          "grid_options": {
+            "columns": 6,
+            "rows": 2
+          }
+        },
+        {
+          "type": "sensor",
+          "entity": "sensor.cabana_alex_smartshunt_current",
+          "name": "Net battery current",
+          "graph": "line",
+          "hours_to_show": 24,
+          "detail": 2,
+          "grid_options": {
+            "columns": 6,
+            "rows": 2
+          }
+        },
+        {
+          "type": "tile",
+          "entity": "sensor.cabana_alex_smartshunt_battery_voltage",
+          "name": "Battery voltage",
+          "grid_options": {
+            "columns": 6,
+            "rows": 1
+          }
+        },
+        {
+          "type": "tile",
+          "entity": "sensor.cabana_alex_discharge_time_display",
+          "name": "To discharge floor",
+          "grid_options": {
+            "columns": 6,
+            "rows": 1
+          },
+          "icon": "mdi:timer-outline"
+        },
+        {
+          "type": "tile",
+          "entity": "sensor.cabana_alex_charge_time_display",
+          "name": "To 100% · at recent rate",
+          "grid_options": {
+            "columns": 6,
+            "rows": 1
+          },
+          "icon": "mdi:timer-outline"
+        },
+        {
+          "type": "tile",
+          "entity": "sensor.cabana_alex_discharge_floor",
+          "name": "Discharge floor",
+          "grid_options": {
+            "columns": 6,
+            "rows": 1
+          }
+        },
+        {
+          "type": "history-graph",
+          "title": "Battery SOC · 24 h",
+          "hours_to_show": 24,
+          "entities": [
+            {
+              "entity": "sensor.cabana_alex_smartshunt_soc",
+              "name": "SmartShunt SOC"
+            }
+          ]
+        },
+        {
+          "type": "markdown",
+          "content": "{% if state_attr('sensor.cabana_alex_charge_timer_state','soc_needs_sync') %}**SOC and timers need full-charge synchronization after the lithium setting correction.**\n\n{% endif %}Times assume the recent net battery current continues; they do not forecast sunlight or charging taper. Positive battery power means charging. The discharge floor is an estimate target, not an automatic cutoff."
+        }
+      ]
+    },
+    {
+      "type": "grid",
+      "cards": [
+        {
+          "type": "heading",
+          "heading": "Solar & climate",
+          "icon": "mdi:solar-power",
+          "heading_style": "title"
+        },
+        {
+          "type": "sensor",
+          "entity": "sensor.cabana_alex_pv_voltage",
+          "name": "PV voltage",
+          "graph": "line",
+          "hours_to_show": 24,
+          "detail": 2,
+          "grid_options": {
+            "columns": 6,
+            "rows": 2
+          }
+        },
+        {
+          "type": "tile",
+          "entity": "sensor.cabana_alex_generated_energy_controller_cycle",
+          "name": "Energy · controller cycle",
+          "grid_options": {
+            "columns": 6,
+            "rows": 1
+          }
+        },
+        {
+          "type": "tile",
+          "entity": "sensor.cabana_alex_peak_power_controller_cycle",
+          "name": "Peak · controller cycle",
+          "grid_options": {
+            "columns": 6,
+            "rows": 1
+          }
+        },
+        {
+          "type": "sensor",
+          "entity": "sensor.cabana_alex_temperature",
+          "name": "Temperature",
+          "graph": "line",
+          "hours_to_show": 24,
+          "detail": 2,
+          "grid_options": {
+            "columns": 6,
+            "rows": 2
+          }
+        },
+        {
+          "type": "sensor",
+          "entity": "sensor.cabana_alex_humidity",
+          "name": "Humidity",
+          "graph": "line",
+          "hours_to_show": 24,
+          "detail": 2,
+          "grid_options": {
+            "columns": 6,
+            "rows": 2
+          }
+        }
+      ]
+    },
+    {
+      "type": "grid",
+      "cards": [
+        {
+          "type": "heading",
+          "heading": "Raspberry Pi",
+          "icon": "mdi:raspberry-pi",
+          "heading_style": "title"
+        },
+        {
+          "type": "entities",
+          "title": "Important fault monitoring",
+          "show_header_toggle": false,
+          "entities": [
+            {
+              "entity": "sensor.cabana_alex_important_events",
+              "name": "Active important faults"
+            },
+            {
+              "entity": "binary_sensor.cabana_alex_event_connection_problem",
+              "name": "Event connection problem"
+            },
+            {
+              "entity": "binary_sensor.cabana_alex_history_storage_problem",
+              "name": "History storage problem"
+            },
+            {
+              "entity": "sensor.cabana_alex_pi_faults_since_boot",
+              "name": "Power / thermal faults since boot"
+            }
+          ]
+        },
+        {
+          "type": "sensor",
+          "entity": "sensor.cabana_alex_pi_temperature",
+          "name": "Pi temperature",
+          "graph": "line",
+          "hours_to_show": 24,
+          "detail": 2,
+          "grid_options": {
+            "columns": 6,
+            "rows": 2
+          }
+        },
+        {
+          "type": "tile",
+          "entity": "sensor.cabana_alex_pi_throttling",
+          "name": "Throttling",
+          "grid_options": {
+            "columns": 6,
+            "rows": 1
+          }
+        },
+        {
+          "type": "entities",
+          "title": "System",
+          "show_header_toggle": false,
+          "entities": [
+            {
+              "entity": "sensor.cabana_alex_pi_model",
+              "name": "Model"
+            },
+            {
+              "entity": "sensor.cabana_alex_pi_uptime_display",
+              "name": "Uptime"
+            },
+            {
+              "entity": "sensor.cabana_alex_pi_memory_display",
+              "name": "Available RAM / total"
+            },
+            {
+              "entity": "sensor.cabana_alex_pi_storage_display",
+              "name": "Free storage / total"
+            }
+          ]
+        },
+        {
+          "type": "markdown",
+          "title": "Recent important events",
+          "content": "{% for e in (state_attr('sensor.cabana_alex_important_events', 'recent_events') or []) | reverse %}\n- {{ as_timestamp(e.timestamp_utc) | timestamp_custom('%d %b %H:%M') }} · {{ e.message }}\n{% else %}\nNo important events recorded.\n{% endfor %}"
+        }
+      ]
+    },
+    {
+      "type": "grid",
+      "cards": [
+        {
+          "type": "heading",
+          "heading": "Controller details",
+          "icon": "mdi:solar-power-variant",
+          "heading_style": "title"
+        },
+        {
+          "type": "entities",
+          "title": "Controller",
+          "show_header_toggle": false,
+          "entities": [
+            {
+              "entity": "sensor.cabana_alex_controller_estimated_soc",
+              "name": "Controller estimated SOC"
+            },
+            {
+              "entity": "sensor.cabana_alex_battery_voltage",
+              "name": "Controller battery voltage"
+            },
+            {
+              "entity": "sensor.cabana_alex_charging_current",
+              "name": "Controller charging current"
+            },
+            {
+              "entity": "sensor.cabana_alex_controller_model",
+              "name": "Model"
+            },
+            {
+              "entity": "sensor.cabana_alex_controller_temperature",
+              "name": "Controller temperature"
+            },
+            {
+              "entity": "sensor.cabana_alex_controller_fault_code",
+              "name": "Fault code"
+            },
+            {
+              "entity": "binary_sensor.cabana_alex_controller_fault",
+              "name": "Fault active"
+            },
+            {
+              "entity": "binary_sensor.cabana_alex_controller_crc_valid",
+              "name": "CRC valid"
+            },
+            {
+              "entity": "sensor.cabana_alex_controller_error",
+              "name": "Last error"
+            },
+            {
+              "entity": "sensor.cabana_alex_controller_sample_time",
+              "name": "Sample time"
+            },
+            {
+              "entity": "sensor.cabana_alex_controller_running_days",
+              "name": "Running days"
+            },
+            {
+              "entity": "sensor.cabana_alex_battery_temperature_unverified_probe",
+              "name": "Battery temperature · unverified probe"
+            }
+          ]
+        },
+        {
+          "type": "entities",
+          "title": "Controller load output",
+          "show_header_toggle": false,
+          "entities": [
+            {
+              "entity": "sensor.cabana_alex_controller_load_voltage",
+              "name": "Voltage"
+            },
+            {
+              "entity": "sensor.cabana_alex_controller_load_current",
+              "name": "Current"
+            },
+            {
+              "entity": "sensor.cabana_alex_controller_load_power",
+              "name": "Power"
+            },
+            {
+              "entity": "sensor.cabana_alex_load_energy_controller_cycle",
+              "name": "Energy · controller cycle"
+            }
+          ]
+        },
+        {
+          "type": "entities",
+          "title": "Climate & heating diagnostics",
+          "show_header_toggle": false,
+          "entities": [
+            {
+              "entity": "sensor.cabana_alex_climate_sensor_battery",
+              "name": "Sensor battery voltage"
+            },
+            {
+              "entity": "binary_sensor.cabana_alex_climate_data_problem",
+              "name": "Climate data problem"
+            },
+            {
+              "entity": "sensor.cabana_alex_climate_sample_time",
+              "name": "Sample time"
+            },
+            {
+              "entity": "binary_sensor.cabana_alex_heating_installation_ready",
+              "name": "Installation ready"
+            },
+            {
+              "entity": "binary_sensor.cabana_alex_heating_output",
+              "name": "Heating output"
+            },
+            {
+              "entity": "sensor.cabana_alex_heating_alarm",
+              "name": "Alarm"
+            },
+            {
+              "entity": "sensor.cabana_alex_heating_status_detail",
+              "name": "Status"
+            }
+          ]
+        },
+        {
+          "type": "entities",
+          "title": "Battery monitor",
+          "show_header_toggle": false,
+          "entities": [
+            {
+              "entity": "sensor.cabana_alex_smartshunt_consumed_charge",
+              "name": "Consumed charge"
+            },
+            {
+              "entity": "sensor.cabana_alex_smartshunt_alarms",
+              "name": "Alarms"
+            },
+            {
+              "entity": "sensor.cabana_alex_smartshunt_alarm_code",
+              "name": "Alarm code"
+            },
+            {
+              "entity": "sensor.cabana_alex_smartshunt_sample_time",
+              "name": "Sample time"
+            },
+            {
+              "entity": "sensor.cabana_alex_charge_timer_average_current",
+              "name": "Averaged charging current"
+            },
+            {
+              "entity": "sensor.cabana_alex_charge_timer_state",
+              "name": "Charge timer"
+            },
+            {
+              "entity": "binary_sensor.cabana_alex_smartshunt_alarm",
+              "name": "Battery alarm"
+            },
+            {
+              "entity": "binary_sensor.cabana_alex_smartshunt_data_problem",
+              "name": "SmartShunt data"
+            }
+          ]
+        },
+        {
+          "type": "markdown",
+          "content": "Controller LOAD readings describe its auxiliary output, not total cabin consumption.\n\nBattery settings last verified: {{ state_attr('sensor.cabana_alex_charge_timer_state','settings_verified_date') or 'Unknown' }}. Changes made later in VictronConnect need a new readback."
+        }
+      ]
+    }
+  ]
+}

@@ -1,10 +1,10 @@
 // Run with a JavaScript engine and the page's inline script (without its startup calls).
 // Network and DOM are simulated; this does not contact the Pi.
 const elements = new Map();
-const document = {getElementById(id) {
+const document = {createElement() { return {textContent:''}; }, getElementById(id) {
   if (!elements.has(id)) {
     const classes = new Set();
-    elements.set(id, {textContent: '', innerHTML: '', value: '', showModal() { this.open=true; }, close() { this.open=false; }, setAttribute(name, value) { this[name] = value; }, classList: {
+    elements.set(id, {children:[], replaceChildren(){ this.children=[]; }, appendChild(child){ this.children.push(child); }, textContent: '', innerHTML: '', value: '', showModal() { this.open=true; }, close() { this.open=false; }, setAttribute(name, value) { this[name] = value; }, classList: {
       toggle(name, enabled) { if (enabled) classes.add(name); else classes.delete(name); },
       remove(name) { classes.delete(name); },
       contains(name) { return classes.has(name); }
@@ -51,6 +51,7 @@ async function fetch(url) {
     if (systemFetchFailed) throw new Error('System unavailable');
     return {ok:true,json:async()=>systemFixture};
   }
+  if (url.startsWith('/api/events')) return {ok:true,json:async()=>({events:[{timestamp_utc:'2026-10-29T00:00:00Z',message:'Pi undervoltage'}],active:[{message:'Pi undervoltage'}]})};
   return {ok: true, json: async () => url === '/api/status' ? fixture : {...historyFixture, rows}};
 }
 function assert(condition, message) { if (!condition) throw new Error(message); }
@@ -86,7 +87,7 @@ async function runFrontendTests() {
   assert($('connection').textContent==='● Live' && !$('solar-tile').classList.contains('stale'),
     'Storage failure incorrectly marks fresh solar unavailable');
   assert($('history-storage-warning').textContent.includes('2016 solar / 1008 climate readings waiting') &&
-    $('history-storage-warning').textContent.includes('7d') &&
+    $('history-storage-warning').textContent.includes('7 d') &&
     $('history-storage-warning').textContent.includes('3 solar / 2 climate readings were not recorded'), 'Backlog, age or loss counts omitted');
   fixture.history.error = null; fixture.history.pending_solar_samples = 0; fixture.history.pending_sensor_samples = 0;
   fixture.history.oldest_pending_age_seconds = null;
@@ -106,7 +107,7 @@ async function runFrontendTests() {
   assert($('system-model').textContent.includes('Raspberry Pi 2'), 'Pi model omitted');
   assert($('system-memory').textContent === '0 MiB', 'Zero available RAM discarded');
   assert($('system-storage').textContent === '24.0 GiB', 'Disk units incorrect');
-  assert($('system-uptime').textContent === '2d 0h', 'Uptime formatting incorrect');
+  assert($('system-uptime').textContent === '2 d 0 h 1 min', 'Uptime formatting incorrect');
   assert($('system-temperature').textContent === '34.7 °C', 'Pi temperature incorrect');
   assert(!$('system-stats').classList.contains('stale'), 'Fresh host data marked stale');
   systemFetchFailed = true; await refreshSystem();
@@ -452,5 +453,8 @@ async function runFrontendTests() {
   await shutdownPi();
   assert(powerCalls === callsAfterShutdown, 'Duplicate shutdown sent');
   fetch = originalFetch;
-  return 'PASS: one-click shutdown, duplicate prevention, heating, history and system panel';
+  await refreshEvents();
+  assert($('attention-message').textContent.includes('Pi undervoltage'), 'Pi fault not visible');
+  assert($('important-event-list').children[0].textContent.includes('Pi undervoltage'), 'Fault history missing');
+  return 'PASS: Pi events, one-click shutdown, duplicate prevention, heating, history and system panel';
 }

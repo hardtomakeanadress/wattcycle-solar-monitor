@@ -169,7 +169,7 @@ class HTTPTest(unittest.TestCase):
         self.assertEqual(server.Handler.timeout, 30)
 
     def test_shutdown_without_sensor_and_failed_final_flush(self):
-        with patch.object(server, 'initialize'), patch.object(server, 'SENSOR', bluetooth_sensor.XiaomiSensor()), \
+        with patch.object(server, 'ImportantEvents'), patch.object(server, 'initialize'), patch.object(server, 'SENSOR', bluetooth_sensor.XiaomiSensor()), \
                 patch.object(server, 'setup_heating'), patch.object(server, 'HEATING', None), \
                 patch.object(server, 'ControlServer') as control, \
                 patch.object(server, 'ThreadingHTTPServer') as http, \
@@ -181,7 +181,7 @@ class HTTPTest(unittest.TestCase):
             lifecycle.attach_mock(flush, 'flush')
             http.return_value.serve_forever.side_effect = KeyboardInterrupt
             self.assertEqual(server.main(), 1)
-            thread.return_value.start.assert_called_once()
+            self.assertEqual(thread.return_value.start.call_count, 2)
             thread.return_value.join.assert_called_once()
             http.return_value.server_close.assert_called_once()
             control.return_value.close.assert_called_once()

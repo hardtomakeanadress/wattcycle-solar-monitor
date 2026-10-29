@@ -151,7 +151,8 @@ dependency. An outage leaves a gap; the application cannot reconstruct readings 
 received. Standard OS maintenance such as package jobs, log rotation, temporary
 file cleanup, and filesystem maintenance does not back up this database. Keep
 an off-device backup and check that it can be restored. No automatic solar-data
-backup, disk expansion, SD-card replacement, or recovery service is installed.
+backup, disk expansion, or SD-card replacement is installed. Cabana has the
+separate recovery service described below; it does not back up solar readings.
 
 Pending RAM history is bounded to 10,080 readings per source
 (seven days at one reading per minute, independent of the actual polling rate).
@@ -242,3 +243,74 @@ without configuration. For an additional trusted DNS name or reverse proxy, set
 `DASHBOARD_ALLOWED_HOSTS` to a comma-separated list of hostnames (without ports).
 The proxy must preserve the browser's Host/Origin. Unlisted rebinding domains
 cannot invoke control endpoints.
+
+
+## Cabana recovery and Home Assistant events
+
+The deployed recovery policy and fault-retention limits are documented in the
+[installation record](../deployment/README.md#pi-recovery-deployed-29-october-2026).
+The [recovery source](../recovery/recovery.py) is installation-specific: Linux user
+`alex`, UID 1000, user service `cabana-solar.service`, port 8080, NetworkManager,
+OpenSSH and Tailscale. Confirm these before installing on another host. It uses
+existing OS commands and Python's standard library; no additional package is needed.
+
+For the verified Cabana installation, install these files as root:
+
+```sh
+sudo install -d -m 755 /usr/local/lib/cabana-recovery /var/lib/cabana-recovery /etc/systemd/journald.conf.d
+sudo install -o root -g root -m 644 recovery/recovery.py /usr/local/lib/cabana-recovery/recovery.py
+sudo install -o root -g root -m 644 recovery/cabana-recovery.service /etc/systemd/system/cabana-recovery.service
+sudo install -o root -g root -m 644 deployment/90-cabana-important.conf /etc/systemd/journald.conf.d/90-cabana-important.conf
+sudo mkdir -p /var/log/journal
+sudo systemd-tmpfiles --create --prefix /var/log/journal
+sudo systemctl restart systemd-journald
+sudo journalctl --flush
+sudo systemctl daemon-reload
+sudo systemctl enable --now cabana-recovery.service
+```
+
+The hardware watchdog was already enabled on Cabana; these commands do not
+configure one. Verify `/sys/class/watchdog/watchdog0/state` and `timeout` separately.
+The service's 90-second systemd watchdog supervises the recovery process, while
+the active 60-second hardware watchdog supervises a stalled OS. Only software
+network/service recovery uses the 10-minute / 1-hour / 5-hour backoff.
+
+Before planned maintenance, suspend automatic recovery with
+`sudo touch /run/cabana-recovery.inhibit`. Remove that file to resume. To disable
+it persistently, use `sudo systemctl disable --now cabana-recovery.service`.
+This leaves the hardware watchdog enabled. Preserve `/var/lib/cabana-recovery`
+and the dashboard's `important-events.sqlite3` when restoring or updating files.
+
+### Home Assistant installation
+
+The [custom integration](../homeassistant/custom_components/cabana_events) uses
+HA's existing HTTP client and storage APIs. Copy its `cabana_events` directory
+into HA's `/config/custom_components/`, restart HA, and add **Cabana important
+events** from Settings → Devices & services. Its configuration flow currently
+uses Cabana's Tailscale endpoint `http://100.82.58.122:8080`; adapt it before
+installing for another Pi. HA initiates all connections, so reverse sharing or
+an inbound connection from the shared Pi is not required.
+
+The [REST configuration](../homeassistant/cabana_alex_rest.yaml) preserves the
+Cabana telemetry entity names and adds readable duration/system displays. Copy
+it to `/config/cabana_alex_rest.yaml` and include it under the existing HA `rest`
+configuration; do not replace unrelated REST sensors. If no `rest` configuration
+exists, the corresponding `configuration.yaml` entry is:
+
+```yaml
+rest: !include cabana_alex_rest.yaml
+```
+
+The [Cabana dashboard view](../homeassistant/cabana_alex_view.json) is a single
+view fragment, not a complete Lovelace dashboard. Merge it into the dashboard's
+`views` list, preserving other views. It expects both the REST entities and the
+custom integration entities to exist. Validate configuration before reloading.
+
+Important events are saved separately in HA's `.storage/cabana_events.history`
+(up to 10,000 events), independent of Recorder retention. The integration emits
+`cabana_important_event` on the HA event bus and provides the `cabana_events.export`
+action with response data. Back up HA's `.storage` as part of normal HA backups;
+do not edit its live cursor/history manually. Solar/battery telemetry history
+continues through the existing REST sensors; it is not backfilled by this event
+integration. Example exports and configuration backups containing other devices
+or credentials are deliberately kept outside this repository.

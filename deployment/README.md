@@ -1,3 +1,39 @@
+## Pi recovery deployed 29 October 2026
+
+`recovery/recovery.py` is installed root-owned at
+`/usr/local/lib/cabana-recovery/recovery.py`, run by `cabana-recovery.service`.
+The existing Broadcom hardware watchdog is active with a 60-second timeout.
+It addresses a stalled kernel/PID 1; it does not prove that every remote network
+path is healthy. Its hardware reset is separate from the software backoff below.
+
+The recovery service checks the default gateway, the local SSH banner, the
+Tailscale daemon's responsiveness and the local dashboard HTTP response. A
+failed service/network gets one restart attempt after a minute. Persistent
+failure triggers an orderly reboot after ten minutes, with later attempts after
+one hour and then five hours. The escalation stage survives reboots on disk;
+monotonic deadlines are rebuilt after startup, so NTP changes cannot shorten
+the delay. Thirty consecutive healthy minutes reset the stage. HA or Internet
+unavailability alone does not trigger reboot, and Tailscale authentication
+problems are not treated as a reason for repeated reboots.
+
+Root-owned state and the last 100 recovery/kernel incidents are stored under
+`/var/lib/cabana-recovery`. Critical kernel OOM, storage I/O and lockup reports
+are selected from a live journal stream, independently of health probes. Current health checks are in the RAM-backed
+`/run/cabana-recovery/status.json`. The dashboard picks up these incidents and
+forwards them through its durable event feed. A hard freeze can prevent the
+last incident from being captured; hardware recovery cannot manufacture a
+missing log entry or deliver events through a disconnected network.
+
+The journald drop-in `/etc/systemd/journald.conf.d/90-cabana-important.conf`
+overrides Raspberry Pi OS's volatile storage: logs through informational severity are saved
+on disk, capped at 32 MB / 14 days. This intentionally trades a small number of
+SD writes for retained diagnostics. Fault transitions are synced separately.
+
+For maintenance, create `/run/cabana-recovery.inhibit` as root to suspend
+software recovery, or stop `cabana-recovery.service`. Remove the inhibit file
+to resume; it disappears at reboot. The hardware watchdog remains separate.
+The service uses only installed commands and Python's standard library.
+
 # Cabana Raspberry Pi installation
 
 ## Current runtime — 16 October 2026

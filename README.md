@@ -58,8 +58,17 @@ flowchart LR
   alarms. Five-second live updates with clear stale/unknown states; existing
   BlueZ and Linux AES support, with no new packages. See
   [configuration and limits](dashboard/README.md).
-- **JSON endpoints:** `/api/status`, `/api/history/range`, and the compatible
-  legacy `/api/history` endpoint.
+- **Battery timers:** smoothed net-current charging estimates and native shunt
+  time to discharge floor, displayed in days, hours and minutes with freshness
+  and synchronization notices.
+- **Important Pi faults:** durable, bounded event history, live kernel-error
+  forwarding and optional outbound Home Assistant delivery with replay.
+- **Bounded Pi recovery:** service restart attempts and persistent reboot backoff,
+  separate from the hardware watchdog. This is Cabana-specific; review the
+  [installation and maintenance instructions](docs/deployment.md#cabana-recovery-and-home-assistant-events)
+  before enabling it elsewhere.
+- **JSON endpoints:** `/api/status`, `/api/system`, `/api/events`,
+  `/api/history/range`, and the compatible legacy `/api/history` endpoint.
 
 ## Hardware and compatibility
 
@@ -237,7 +246,8 @@ The **Raspberry Pi** panel shows the model, total/available usable memory, free
 history-filesystem space, CPU temperature and uptime. The system API also provides
 processor, software-version and power/thermal diagnostics, without showing those
 extra details on the page. A separate cached `/api/system` endpoint refreshes
-these measurements every 30 seconds without serial or Bluetooth reads. Missing
+these measurements every 30 seconds without serial or Bluetooth reads. The host
+cache refreshes every five seconds for fault monitoring. Missing
 measurements show `—` or “unavailable”; system-information failures do not affect
 the solar and climate collectors. Hostnames, network addresses, serial numbers
 and credentials are excluded. Host statistics are not saved to the history DB.

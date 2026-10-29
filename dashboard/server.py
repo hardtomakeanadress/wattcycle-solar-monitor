@@ -25,11 +25,14 @@ from load_control import ControlServer
 from heating import Heating
 from victron_shunt import VictronShunt
 from charge_timer import ChargeTimer
+from important_events import ImportantEvents, monitor as monitor_events
 
 ROOT = Path(__file__).resolve().parent
 READER = ROOT.parent / 'read_controller.py'
 DB = Path(os.environ.get('SOLAR_DATABASE', str(ROOT / 'history.sqlite3'))).expanduser()
 SYSTEM = SystemInfo(DB.parent)
+EVENTS = None
+EVENT_CLIENTS = threading.BoundedSemaphore(8)
 CHARGE_TIMER = ChargeTimer(DB.parent / 'charge-timer.json')
 SHUNT = VictronShunt(os.environ.get('VICTRON_SHUNT_ADDRESS', ''),
                      os.environ.get('VICTRON_SHUNT_KEY_FILE', str(DB.parent / 'victron.key')),
@@ -629,6 +632,25 @@ class Handler(BaseHTTPRequestHandler):
             body, kind = (ROOT / 'index.html').read_bytes(), 'text/html; charset=utf-8'
         elif route == '/api/status':
             body, kind = json.dumps(finite_json(snapshot()), allow_nan=False).encode(), 'application/json'
+        elif route == '/api/events':
+            if EVENTS is None:
+                self.send_error(503, 'Event monitor starting')
+                return
+            params = parse_qs(url.query)
+            try:
+                after = max(0, EVENTS.sequence - 20) if params.get('recent') == ['1'] else max(0, int(params.get('after', ['0'])[0]))
+                wait = min(25, max(0, int(params.get('wait', ['0'])[0])))
+            except ValueError:
+                self.send_error(400, 'Invalid event cursor')
+                return
+            if not EVENT_CLIENTS.acquire(blocking=False):
+                self.send_error(503, 'Event client limit')
+                return
+            try:
+                result = EVENTS.response(after, params.get('generation', [None])[0], wait)
+            finally:
+                EVENT_CLIENTS.release()
+            body, kind = json.dumps(result).encode(), 'application/json'
         elif route == '/api/system':
             body, kind = json.dumps(SYSTEM.snapshot()).encode(), 'application/json'
         elif route == '/api/history/range':
@@ -661,10 +683,11 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
-    global SHUTDOWN_PENDING
+    global SHUTDOWN_PENDING, EVENTS
     logging.basicConfig(level=logging.INFO)
     initialize()
     STOP.clear()
+    EVENTS = ImportantEvents(DB.parent / 'important-events.sqlite3')
     SHUTDOWN_PENDING = False
     server = ThreadingHTTPServer((os.environ.get('DASHBOARD_BIND', '0.0.0.0'), int(os.environ.get('DASHBOARD_PORT', '8080'))), Handler)
     server.daemon_threads = False
@@ -687,6 +710,8 @@ def main():
         collector.start()
         sensor_thread = SENSOR.start(STOP)
         shunt_thread = SHUNT.start(STOP)
+        threading.Thread(target=monitor_events, args=(EVENTS, snapshot, SYSTEM, STOP),
+                         daemon=True, name='important-events').start()
         logging.info('Dashboard listening on %s:%s', *server.server_address)
         server.serve_forever()
     except KeyboardInterrupt:
@@ -696,6 +721,10 @@ def main():
             SHUTDOWN_PENDING = True
         # Finish HTTP reads before the final write, so readers cannot prevent
         # SQLite committing accepted samples during an orderly shutdown.
+        STOP.set()
+        if EVENTS is not None:
+            with EVENTS.condition:
+                EVENTS.condition.notify_all()
         server.server_close()
         if control is not None:
             control.close()

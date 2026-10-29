@@ -50,6 +50,8 @@ async function main() {
       console.error(await page.evaluate(()=>({status,historyLoading,historyData,historyRequest,rangeDraft,message:document.getElementById('history-message').textContent})));
       throw error;
     }
+    await page.waitForFunction(()=>!!eventData);
+    assert((await page.locator('#event-connection').textContent()).startsWith('Connected'));
     assert.equal(await page.locator('#range').inputValue(),'86400');
     assert.equal(await page.locator('#timer-settings-open, #timer-settings').count(), 0);
     assert.equal(await page.locator('#panel-voltage').textContent(),

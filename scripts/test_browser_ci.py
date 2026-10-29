@@ -24,6 +24,8 @@ def main():
     with tempfile.TemporaryDirectory(prefix='wattcycle-browser-') as folder:
         server.DB = Path(folder) / 'history.sqlite3'
         server.SYSTEM = server.SystemInfo(Path(folder))
+        server.EVENTS = server.ImportantEvents(Path(folder) / 'important-events.sqlite3')
+        server.EVENTS.emit('fixture', 'Browser fixture: event delivery ready', False, 'info')
         server.SENSOR = XiaomiSensor('AA:BB:CC:DD:EE:FF', 'Test climate')
         server.initialize()
         now = int(time.time()) - 30

@@ -10,7 +10,7 @@ import subprocess
 import threading
 import time
 
-INTERVAL = 30
+INTERVAL = 5
 THROTTLE_LABELS = ('Under-voltage', 'Frequency capped', 'Throttled', 'Temperature limit')
 
 

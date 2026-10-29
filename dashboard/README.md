@@ -1,3 +1,44 @@
+## Fault reporting and timer correction — 29 October 2026
+
+The deployed charge estimator retains positive, zero and negative net-current
+samples across short interruptions, uses a three-minute window, and waits for
+one minute of observations after startup or a radio gap. Its ETA assumes that
+recent net current continues; it does not forecast sunlight or charging taper.
+Durations use days, hours and minutes. `settings_verified_date` exposes the date
+of the hardware readback rather than suggesting that cached settings are live.
+
+Direct SmartShunt readback confirmed 300 Ah, 30% discharge floor, efficiency 95%
+and Peukert 1.25. The last two were corrected to Victron's lithium guidance of
+98% and 1.01, and persistence was verified on reconnect. Other battery settings
+were unchanged. Reported SOC recalculated from about 68% to 40%; a direct SOC
+register read confirmed the new reading. No manual SOC synchronization was
+performed. The `soc_needs_sync` advisory remains until the shunt reports 100%,
+zero consumed Ah and at least its verified 28 V charged-voltage threshold.
+Physical battery model/wiring and charge detection have not been recommissioned.
+
+`important_events.py` records fault transitions in `important-events.sqlite3`
+with synchronous commits and a 2,000-event limit. `/api/events` supports a
+persistent generation, cursor, gap detection and up to 25-second long polling.
+No-event waits do not delay new events: the producer wakes waiting clients.
+The page shows active faults and recent events. System power/thermal flags are
+sampled every five seconds; critical memory pressure is debounced for a minute.
+History-storage failures and dropped samples are included. Repeated unchanged
+faults are not written again.
+
+The approved `homeassistant/custom_components/cabana_events` integration opens
+an outbound connection from HA to the Pi. No new Tailscale sharing/grants are
+required. It persists up to 10,000 events in HA's `.storage/cabana_events.history`
+before advancing its replay cursor, raises `cabana_important_event` events for
+automations, and exposes `cabana_events.export` for exporting the retained log.
+Connection loss is visible and saved events replay after reconnection. Retention
+is bounded; gaps beyond the Pi's retained history are explicitly reported.
+The existing REST sensors and their entity IDs remain in place.
+
+Deployment backups and verification evidence are outside the public checkout:
+`../fixes-20261029/`. Pi/HA restarts and event persistence were verified; no hard
+freeze or forced power-cut test was performed. Shunt telemetry is still not
+archived locally for historical backfill into HA.
+
 # Dashboard implementation
 
 See the [project README](../README.md) for setup and
@@ -86,7 +127,8 @@ guide before upgrading a database already collected at five-minute intervals.
 | --- | --- |
 | `GET /` | Self-contained dashboard; no external scripts or fonts |
 | `GET /api/status` | Latest reading, error, freshness, and collection interval |
-| `GET /api/system` | Allowlisted host specifications and health, cached for 30 seconds |
+| `GET /api/events` | Durable fault transitions; cursor/generation replay and optional long polling |
+| `GET /api/system` | Allowlisted host specifications and health, cached for five seconds |
 | `GET /api/history` | Legacy: last 24 hours, charge watts and battery volts, five-minute buckets |
 | `GET /api/history/range?start=…&end=…` | Selected Unix time range, metric definitions, all measured scalar fields, storage/coverage metadata |
 | `GET /api/history/range?range=all` | All saved dates using bounded display sampling |
@@ -153,9 +195,10 @@ both rows; `≈` identifies the calculated charging value. Both timers stay visi
 there are no display switches or timer settings dialog.
 
 `charge_timer.py` receives only fresh, changed shunt advertisements. It uses a
-three-minute time-weighted average of net positive battery current, configured Ah capacity,
-reported SOC and the configured charge-efficiency factor. A discharge or radio
-gap resets the average. Charging ETA waits for fresh samples after startup,
+three-minute time-weighted average of signed net battery current, configured Ah capacity,
+reported SOC and the configured charge-efficiency factor. Zero and negative current
+remain in the window; invalid data or a radio gap resets it. Charging ETA waits
+for at least one minute of fresh observations after startup or a gap,
 pauses when charging stops, and disappears for stale/unknown data. A full SOC
 shows a checkmark. Target charge is always 100%; it is not user-adjustable.
 
@@ -163,7 +206,9 @@ The private `charge-timer.json` beside the history database contains verified
 `capacity_Ah`, `charge_efficiency_percent` and `discharge_floor_percent`.
 Legacy display preferences are ignored.
 Provision hardware metadata from actual shunt readback; do not guess it.
-Cabana's metadata was read on 25 October 2026 (300 Ah, 95% efficiency, 30% floor).
+Cabana's metadata was verified on 29 October 2026 (300 Ah, 98% efficiency, 30% floor).
+The shunt's Peukert exponent was also corrected to 1.01. Its SOC recalculated, so
+the UI flags synchronization as pending until the shunt reports full charge.
 If these hardware settings are changed separately, refresh that metadata.
 `/api/status.timers` identifies the ETA source as `calculated`. There is no
 writable timer endpoint; this module cannot change the shunt's floor or capacity.

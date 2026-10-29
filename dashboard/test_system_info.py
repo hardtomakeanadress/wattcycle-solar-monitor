@@ -90,12 +90,12 @@ class SystemInfoTest(unittest.TestCase):
         with patch.object(system.time, 'monotonic', return_value=10) as clock, \
                 patch.object(self.info, 'collect', wraps=self.info.collect) as collect:
             first = self.info.snapshot()
-            clock.return_value = 39
+            clock.return_value = 10 + system.INTERVAL - 1
             cached = self.info.snapshot()
             self.assertEqual(cached['timestamp_utc'], first['timestamp_utc'])
-            self.assertEqual(cached['age_seconds'], 29)
+            self.assertEqual(cached['age_seconds'], system.INTERVAL - 1)
             self.assertEqual(collect.call_count, 1)
-            clock.return_value = 40
+            clock.return_value = 10 + system.INTERVAL
             self.info.snapshot()
             self.assertEqual(collect.call_count, 2)
 

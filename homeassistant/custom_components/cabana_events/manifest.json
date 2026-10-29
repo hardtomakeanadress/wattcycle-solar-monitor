@@ -1,0 +1,1 @@
+{"domain":"cabana_events","name":"Cabana important events","version":"1.0.0","config_flow":true,"documentation":"https://github.com/hardtomakeanadress/wattcycle-solar-monitor","codeowners":[],"requirements":[],"iot_class":"local_push","integration_type":"hub","single_config_entry":true}

@@ -562,10 +562,10 @@ footer {
 <div class="electrical-readings" aria-label="Battery voltage and current"><span><span id="battery-flow-voltage">—</span> <small>V</small></span><span><span id="battery-flow-current">—</span> <small>A</small></span></div><div class="tile-meta"><span id="battery-flow" class="state-badge" role="status">Connecting</span></div><span id="battery-direction" class="sr-only"></span>
 </article>
 <article id="battery-time-tile" class="tile hidden" aria-label="Battery timers">
-<div class="tile-heading timer-heading"><span><span class="tile-icon"><svg class="icon" aria-hidden="true"><use href="#i-clock"/></svg></span>Timers</span></div>
+<div class="tile-heading timer-heading"><span><span class="tile-icon"><svg class="icon" aria-hidden="true"><use href="#i-clock"/></svg></span>Timers · at recent rate</span></div>
 <div class="timer-lines">
 <div id="discharge-timer-row" class="timer-line discharge" aria-label="Time to discharge floor"><span class="timer-endpoint"><svg class="icon" aria-hidden="true"><use href="#i-discharge"/></svg><span id="timer-floor-label">—%</span></span><span id="battery-remaining" class="timer-value">—</span></div>
-<div id="charge-timer-row" class="timer-line charge hidden" aria-label="Time to 100 percent"><span class="timer-endpoint"><svg class="icon" aria-hidden="true"><use id="timer-charge-icon" href="#i-charge"/></svg><span id="timer-charge-label">100%</span></span><span id="battery-charge-remaining" class="timer-value" title="Calculated from average net charging current">—</span></div>
+<div id="charge-timer-row" class="timer-line charge hidden" aria-label="Time to 100 percent"><span class="timer-endpoint"><svg class="icon" aria-hidden="true"><use id="timer-charge-icon" href="#i-charge"/></svg><span id="timer-charge-label">100%</span></span><span id="battery-charge-remaining" class="timer-value" title="At recent net charging rate; sunlight and charging taper are not forecast">—</span></div>
 </div><div id="battery-time-note" class="sr-only"></div>
 </article>
 <article id="solar-tile" class="tile solar-tile" aria-label="Solar charging power">
@@ -619,7 +619,7 @@ footer {
 </section>
 <div class="equipment-group"><details id="controller-details" class="equipment-details"><summary><svg class="icon " aria-hidden="true"><use href="#i-chip"/></svg>Controller details<small id="stage">—</small></summary><div class="detail-body"><div class="detail-grid">
 <div class="detail-metric">Controller voltage<strong><span id="battery_V">—</span> V</strong></div><div class="detail-metric">Controller SOC estimate<strong><span id="controller_estimated_SOC_percent">—</span>%</strong></div><div class="detail-metric">Panel voltage<strong><span id="PV_V">—</span> V</strong></div><div class="detail-metric">Charge current<strong><span id="charge_A">—</span> A</strong></div><div class="detail-metric">Cycle peak<strong><span id="today_peak_W">—</span> W</strong></div>
-<div class="detail-metric">Controller temperature<strong id="temp">—</strong></div><div class="detail-metric">Battery temperature field<strong id="batterytemp">—</strong></div><div class="detail-metric">DC load<strong id="load">—</strong></div><div class="detail-metric">Faults<strong id="faults">—</strong></div>
+<div class="detail-metric">Controller temperature<strong id="temp">—</strong></div><div class="detail-metric">Battery temperature field<strong id="batterytemp">—</strong></div><div class="detail-metric">Controller auxiliary output<strong id="load">—</strong></div><div class="detail-metric">Faults<strong id="faults">—</strong></div>
 </div></div></details><details class="equipment-details system-panel" aria-labelledby="system-title"><summary><svg class="icon" aria-hidden="true"><use href="#i-chip"/></svg><span id="system-title">Raspberry Pi</span><small id="system-updated" role="status">Connecting</small></summary><div class="detail-body">
 <p class="system-model" id="system-model"></p>
 <div class="system-stats" id="system-stats">
@@ -634,6 +634,7 @@ footer {
 <footer><span id="identity">WattCycle · M-2430N</span><p><button id="shutdown-button" type="button" onclick="shutdownPi()" class="power-button"><svg class="icon " aria-hidden="true"><use href="#i-power"/></svg>Shut down Pi</button></p><span id="updated"></span></footer>
 <p class="system-note" id="shutdown-message" role="status" aria-live="polite"></p>
 </main>
+<details class="panel" style="margin:1rem 0;padding:1rem"><summary>Important Pi &amp; solar events</summary><p id="event-connection">Connecting…</p><ol id="important-event-list"></ol></details>
 <script>
 const $ = id => document.getElementById(id);
 const put = (id, value) => $(id).textContent = value;
@@ -735,8 +736,29 @@ function freshness() {
     status?.sensor?.enabled && Number.isFinite(climateInterval) ? `Climate · ${climateInterval/60} min` : ''].filter(Boolean).join(' / '));
 }
 
+let eventData = null;
+async function refreshEvents() {
+  try {
+    const data = await getJSON('/api/events?recent=1');
+    eventData = data;
+    put('event-connection', data.storage_error || 'Connected · important faults saved on the Pi');
+    const list = $('important-event-list');
+    list.replaceChildren();
+    for (const event of data.events.slice(-20).reverse()) {
+      const item = document.createElement('li');
+      item.textContent = new Date(event.timestamp_utc).toLocaleString() + ' · ' + event.message;
+      list.appendChild(item);
+    }
+    if (!data.events.length) { const item = document.createElement('li'); item.textContent = 'No important faults recorded'; list.appendChild(item); }
+    attentionStatus();
+  } catch (_) { put('event-connection', 'Event connection unavailable · retrying'); }
+  finally { setTimeout(refreshEvents, 3000); }
+}
+
 function attentionStatus() {
-  const warnings = [];
+  const warnings = (eventData?.active || []).map(e => e.message);
+  if (eventData?.storage_error) warnings.push(eventData.storage_error);
+  if (status?.timers?.soc_needs_sync) warnings.push('Battery SOC and timers need full-charge synchronization after the lithium setting correction');
   const shunt = status?.shunt;
   if (shunt?.enabled) {
     const age = shunt.age_seconds == null ? Infinity : shunt.age_seconds + elapsed();
@@ -927,15 +949,16 @@ function systemBytes(value) {
 function systemUptime(seconds) {
   if (!Number.isFinite(seconds) || seconds < 0) return '—';
   const days = Math.floor(seconds/86400), hours = Math.floor(seconds/3600)%24;
-  return days ? `${days}d ${hours}h` : hours ? `${hours}h ${Math.floor(seconds/60)%60}m` : `${Math.floor(seconds/60)}m`;
+  return `${days ? days + ' d ' : ''}${days || hours ? hours + ' h ' : ''}${Math.floor(seconds/60)%60} min`;
 }
 function systemFreshness() {
   const age = systemData ? systemData.age_seconds + Math.max(0,(performance.now()-systemReceivedAt)/1000) : Infinity;
   const stale = !systemConnected || !Number.isFinite(age) || age > 90;
   $('system-stats').classList.toggle('stale', stale);
   put('system-updated', !systemData ? 'System information unavailable' : stale ? 'Last known system information' : 'Updated ' + new Date(systemData.timestamp_utc).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}));
-  put('system-message', stale ? 'System information unavailable. Retrying…' : '');
-  $('system-message').classList.toggle('warning-text', stale);
+  const faults = [...(systemData?.throttle_current || []), ...(systemData?.throttle_since_boot || []).map(x => x + ' recorded since boot')];
+  put('system-message', stale ? 'System information unavailable. Retrying…' : faults.join(' · '));
+  $('system-message').classList.toggle('warning-text', stale || faults.length > 0);
 }
 async function refreshSystem() {
   try {
@@ -1169,5 +1192,6 @@ async function history() {
 
 refresh().then(history);
 refreshSystem();
+refreshEvents();
 setInterval(freshness, 1000);
 </script></html>

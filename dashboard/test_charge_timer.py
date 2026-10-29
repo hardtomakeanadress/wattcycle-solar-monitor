@@ -27,14 +27,14 @@ class ChargeTimerTest(unittest.TestCase):
         self.timer.observe({'current_A':amps})
 
     def test_full_target_and_net_charging_current(self):
-        self.sample(100,10);self.sample(110,10)
+        self.sample(100,10);self.sample(130,10);self.sample(160,10)
         result=self.timer.snapshot(self.shunt)
         self.assertEqual(result['charge_minutes'],900)  # 150 Ah / 10 A = 15 hours.
         self.assertEqual(result['target_percent'],100)
         self.assertEqual(result['source'],'calculated')
 
     def test_efficiency_and_time_weighted_average(self):
-        self.sample(100,10);self.sample(110,20);self.clock.return_value=130
+        self.sample(100,10);self.sample(120,20);self.sample(140,20);self.clock.return_value=160
         result=self.timer.snapshot(self.shunt)
         self.assertAlmostEqual(result['average_current_A'],16.667,places=3)
         self.assertEqual(result['charge_minutes'],540)
@@ -60,11 +60,19 @@ class ChargeTimerTest(unittest.TestCase):
         self.assertEqual(self.timer.snapshot(self.shunt)['state'],'warming')
         self.assertEqual(ChargeTimer(self.path).snapshot(self.shunt)['state'],'warming')
 
-    def test_discharge_clears_charging_average(self):
-        self.sample(100,40);self.sample(110,-5);self.sample(120,10)
+    def test_brief_dip_keeps_full_net_current_window(self):
+        for stamp in range(0,181,5):self.sample(stamp,3)
+        self.sample(185,0);self.sample(190,10);self.sample(195,10)
+        self.clock.return_value=196
+        result=self.timer.snapshot(self.shunt)
+        self.assertAlmostEqual(result['average_current_A'],3.15,places=3)
+        self.assertEqual(result['observed_seconds'],180)
+
+    def test_negative_current_is_included_and_startup_waits_a_minute(self):
+        self.sample(100,10);self.sample(120,-10);self.sample(140,10)
         self.assertEqual(self.timer.snapshot(self.shunt)['state'],'warming')
-        self.sample(130,10)
-        self.assertEqual(self.timer.snapshot(self.shunt)['average_current_A'],10)
+        self.clock.return_value=160
+        self.assertAlmostEqual(self.timer.snapshot(self.shunt)['average_current_A'],3.333,places=3)
 
     def test_legacy_visibility_and_averaging_preferences_are_ignored(self):
         self.path.write_text(json.dumps(dict(self.config, show_charge_timer=False,
@@ -85,3 +93,11 @@ class ChargeTimerTest(unittest.TestCase):
         self.assertFalse(ChargeTimer(self.path).snapshot(self.shunt)['configured'])
         self.path.write_text(json.dumps(dict(self.config,capacity_Ah=0)))
         self.assertIsNone(ChargeTimer(self.path).snapshot(self.shunt)['charge_minutes'])
+
+    def test_sync_advisory_requires_full_shunt_readback_and_persists(self):
+        self.path.write_text(json.dumps(dict(self.config,soc_needs_sync=True)))
+        timer=ChargeTimer(self.path)
+        self.assertTrue(timer.snapshot(self.shunt)['soc_needs_sync'])
+        full=dict(self.shunt,reading={'soc_percent':100,'current_A':1,'battery_V':28.1,'consumed_Ah':0})
+        self.assertFalse(timer.snapshot(full)['soc_needs_sync'])
+        self.assertFalse(ChargeTimer(self.path).soc_needs_sync)

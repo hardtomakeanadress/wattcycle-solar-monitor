@@ -1,0 +1,21 @@
+[Unit]
+Description=Cabana Pi bounded recovery and critical kernel events
+After=network.target tailscaled.service
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=notify
+ExecStart=/usr/bin/python3 /usr/local/lib/cabana-recovery/recovery.py
+Restart=on-failure
+RestartSec=30
+WatchdogSec=90
+TimeoutStopSec=15
+OOMScoreAdjust=-900
+Nice=-5
+UMask=0022
+ProtectSystem=full
+ProtectHome=read-only
+
+[Install]
+WantedBy=multi-user.target

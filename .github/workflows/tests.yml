@@ -22,6 +22,8 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - run: python -m unittest discover -s dashboard -p 'test_*.py' -v
+      - run: python -m unittest discover -s recovery -p 'test_*.py' -v
+      - run: python -m compileall -q homeassistant/custom_components/cabana_events
 
   frontend:
     runs-on: ubuntu-latest

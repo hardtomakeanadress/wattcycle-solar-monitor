@@ -1,0 +1,570 @@
+- resource: http://100.82.58.122:8080/api/status
+  method: GET
+  scan_interval: 60
+  timeout: 10
+  sensor:
+  - name: Cabana Alex Battery voltage
+    unique_id: cabana_alex_battery_voltage
+    value_template: '{{ value_json.reading.battery_V }}'
+    availability: '{{ value_json is defined and value_json.get(''reading'') is mapping and not value_json.get(''stale'', true)
+      and not value_json.get(''error'') and value_json.reading.get(''battery_V'') is not none }}'
+    unit_of_measurement: V
+    device_class: voltage
+    state_class: measurement
+  - name: Cabana Alex Controller estimated SOC
+    unique_id: cabana_alex_estimated_soc
+    value_template: '{{ value_json.reading.controller_estimated_SOC_percent }}'
+    availability: '{{ value_json is defined and value_json.get(''reading'') is mapping and not value_json.get(''stale'', true)
+      and not value_json.get(''error'') and value_json.reading.get(''controller_estimated_SOC_percent'') is not none }}'
+    unit_of_measurement: '%'
+    device_class: battery
+    state_class: measurement
+  - name: Cabana Alex Charging current
+    unique_id: cabana_alex_charge_current
+    value_template: '{{ value_json.reading.charge_A }}'
+    availability: '{{ value_json is defined and value_json.get(''reading'') is mapping and not value_json.get(''stale'', true)
+      and not value_json.get(''error'') and value_json.reading.get(''charge_A'') is not none }}'
+    unit_of_measurement: A
+    device_class: current
+    state_class: measurement
+  - name: Cabana Alex Charging power
+    unique_id: cabana_alex_charge_power
+    value_template: '{{ value_json.reading.charge_W }}'
+    availability: '{{ value_json is defined and value_json.get(''reading'') is mapping and not value_json.get(''stale'', true)
+      and not value_json.get(''error'') and value_json.reading.get(''charge_W'') is not none }}'
+    unit_of_measurement: W
+    device_class: power
+    state_class: measurement
+  - name: Cabana Alex PV voltage
+    unique_id: cabana_alex_pv_voltage
+    value_template: '{{ value_json.reading.PV_V }}'
+    availability: '{{ value_json is defined and value_json.get(''reading'') is mapping and not value_json.get(''stale'', true)
+      and not value_json.get(''error'') and value_json.reading.get(''PV_V'') is not none }}'
+    unit_of_measurement: V
+    device_class: voltage
+    state_class: measurement
+  - name: Cabana Alex Generated energy controller cycle
+    unique_id: cabana_alex_cycle_energy
+    value_template: '{{ value_json.reading.today_generation_Wh }}'
+    availability: '{{ value_json is defined and value_json.get(''reading'') is mapping and not value_json.get(''stale'', true)
+      and not value_json.get(''error'') and value_json.reading.get(''today_generation_Wh'') is not none }}'
+    unit_of_measurement: Wh
+    device_class: energy
+    state_class: total_increasing
+  - name: Cabana Alex Peak power controller cycle
+    unique_id: cabana_alex_cycle_peak_power
+    value_template: '{{ value_json.reading.today_peak_W }}'
+    availability: '{{ value_json is defined and value_json.get(''reading'') is mapping and not value_json.get(''stale'', true)
+      and not value_json.get(''error'') and value_json.reading.get(''today_peak_W'') is not none }}'
+    unit_of_measurement: W
+    device_class: power
+  - name: Cabana Alex Controller temperature
+    unique_id: cabana_alex_controller_temperature
+    value_template: '{{ value_json.reading.controller_C }}'
+    availability: '{{ value_json is defined and value_json.get(''reading'') is mapping and not value_json.get(''stale'', true)
+      and not value_json.get(''error'') and value_json.reading.get(''controller_C'') is not none }}'
+    unit_of_measurement: °C
+    device_class: temperature
+    state_class: measurement
+  - name: Cabana Alex Battery temperature unverified probe
+    unique_id: cabana_alex_raw_battery_temperature
+    value_template: '{{ value_json.reading.battery_temperature_field_C }}'
+    availability: '{{ value_json is defined and value_json.get(''reading'') is mapping and not value_json.get(''stale'', true)
+      and not value_json.get(''error'') and value_json.reading.get(''battery_temperature_field_C'') is not none }}'
+    unit_of_measurement: °C
+    device_class: temperature
+    state_class: measurement
+  - name: Cabana Alex Controller load voltage
+    unique_id: cabana_alex_load_voltage
+    value_template: '{{ value_json.reading.load_V }}'
+    availability: '{{ value_json is defined and value_json.get(''reading'') is mapping and not value_json.get(''stale'', true)
+      and not value_json.get(''error'') and value_json.reading.get(''load_V'') is not none }}'
+    unit_of_measurement: V
+    device_class: voltage
+    state_class: measurement
+  - name: Cabana Alex Controller load current
+    unique_id: cabana_alex_load_current
+    value_template: '{{ value_json.reading.load_A }}'
+    availability: '{{ value_json is defined and value_json.get(''reading'') is mapping and not value_json.get(''stale'', true)
+      and not value_json.get(''error'') and value_json.reading.get(''load_A'') is not none }}'
+    unit_of_measurement: A
+    device_class: current
+    state_class: measurement
+  - name: Cabana Alex Controller load power
+    unique_id: cabana_alex_load_power
+    value_template: '{{ value_json.reading.load_W }}'
+    availability: '{{ value_json is defined and value_json.get(''reading'') is mapping and not value_json.get(''stale'', true)
+      and not value_json.get(''error'') and value_json.reading.get(''load_W'') is not none }}'
+    unit_of_measurement: W
+    device_class: power
+    state_class: measurement
+  - name: Cabana Alex Load energy controller cycle
+    unique_id: cabana_alex_cycle_load_energy
+    value_template: '{{ value_json.reading.today_load_Wh }}'
+    availability: '{{ value_json is defined and value_json.get(''reading'') is mapping and not value_json.get(''stale'', true)
+      and not value_json.get(''error'') and value_json.reading.get(''today_load_Wh'') is not none }}'
+    unit_of_measurement: Wh
+    device_class: energy
+    state_class: total_increasing
+  - name: Cabana Alex Charge status
+    unique_id: cabana_alex_charge_status
+    value_template: '{{ value_json.reading.charge_status }}'
+    availability: '{{ value_json is defined and value_json.get(''reading'') is mapping and not value_json.get(''stale'', true)
+      and not value_json.get(''error'') and value_json.reading.get(''charge_status'') is not none }}'
+  - name: Cabana Alex Controller fault code
+    unique_id: cabana_alex_fault_code
+    value_template: '{{ value_json.reading.fault_bits }}'
+    availability: '{{ value_json is defined and value_json.get(''reading'') is mapping and not value_json.get(''stale'', true)
+      and not value_json.get(''error'') and value_json.reading.get(''fault_bits'') is not none }}'
+  - name: Cabana Alex Controller running days
+    unique_id: cabana_alex_running_days
+    value_template: '{{ value_json.reading.running_days }}'
+    availability: '{{ value_json is defined and value_json.get(''reading'') is mapping and not value_json.get(''stale'', true)
+      and not value_json.get(''error'') and value_json.reading.get(''running_days'') is not none }}'
+    unit_of_measurement: d
+    device_class: duration
+  - name: Cabana Alex Controller sample time
+    unique_id: cabana_alex_controller_update
+    value_template: '{{ value_json.reading.timestamp_utc }}'
+    availability: '{{ value_json is defined and value_json.get(''reading'') is mapping and not value_json.get(''stale'', true)
+      and not value_json.get(''error'') and value_json.reading.get(''timestamp_utc'') is not none }}'
+    device_class: timestamp
+  - name: Cabana Alex Controller model
+    unique_id: cabana_alex_controller_info
+    value_template: '{{ value_json.reading.model }}'
+    availability: '{{ value_json is defined and value_json.get(''reading'') is mapping }}'
+    json_attributes_path: $.reading
+    json_attributes:
+    - system_V
+    - model
+    - version_registers_raw
+    - cumulative_generation_words_raw
+    - settings_0201_0203_raw
+    - telemetry_0100_0111_raw
+  - name: Cabana Alex Controller error
+    unique_id: cabana_alex_controller_error
+    value_template: '{{ value_json.get(''error'') or ''None'' }}'
+    availability: '{{ value_json is defined and true }}'
+  - name: Cabana Alex Temperature
+    unique_id: cabana_alex_temperature
+    value_template: '{{ value_json.sensor.reading.temperature_C }}'
+    availability: '{{ value_json is defined and value_json.get(''sensor'') is mapping and value_json.sensor.get(''reading'')
+      is mapping and not value_json.sensor.get(''stale'', true) and not value_json.sensor.get(''error'') and value_json.sensor.reading.get(''temperature_C'')
+      is not none }}'
+    unit_of_measurement: °C
+    device_class: temperature
+    state_class: measurement
+  - name: Cabana Alex Humidity
+    unique_id: cabana_alex_humidity
+    value_template: '{{ value_json.sensor.reading.humidity_percent }}'
+    availability: '{{ value_json is defined and value_json.get(''sensor'') is mapping and value_json.sensor.get(''reading'')
+      is mapping and not value_json.sensor.get(''stale'', true) and not value_json.sensor.get(''error'') and value_json.sensor.reading.get(''humidity_percent'')
+      is not none }}'
+    unit_of_measurement: '%'
+    device_class: humidity
+    state_class: measurement
+  - name: Cabana Alex Climate sensor battery
+    unique_id: cabana_alex_climate_battery_voltage
+    value_template: '{{ value_json.sensor.reading.battery_V }}'
+    availability: '{{ value_json is defined and value_json.get(''sensor'') is mapping and value_json.sensor.get(''reading'')
+      is mapping and not value_json.sensor.get(''stale'', true) and not value_json.sensor.get(''error'') and value_json.sensor.reading.get(''battery_V'')
+      is not none }}'
+    unit_of_measurement: V
+    device_class: voltage
+    state_class: measurement
+  - name: Cabana Alex Climate sample time
+    unique_id: cabana_alex_climate_update
+    value_template: '{{ value_json.sensor.reading.timestamp_utc }}'
+    availability: '{{ value_json is defined and value_json.get(''sensor'') is mapping and value_json.sensor.get(''reading'')
+      is mapping and not value_json.sensor.get(''stale'', true) and not value_json.sensor.get(''error'') and value_json.sensor.reading.get(''timestamp_utc'')
+      is not none }}'
+    device_class: timestamp
+  - name: Cabana Alex Heating phase
+    unique_id: cabana_alex_heating_phase
+    value_template: '{{ value_json.heating.phase }}'
+    availability: '{{ value_json is defined and value_json.get(''heating'') is mapping and value_json.heating.get(''phase'')
+      is not none }}'
+  - name: Cabana Alex Heating on temperature
+    unique_id: cabana_alex_heating_on_temperature
+    value_template: '{{ value_json.heating.on_C }}'
+    availability: '{{ value_json is defined and value_json.get(''heating'') is mapping and value_json.heating.get(''on_C'')
+      is not none }}'
+    unit_of_measurement: °C
+    device_class: temperature
+  - name: Cabana Alex Heating off temperature
+    unique_id: cabana_alex_heating_off_temperature
+    value_template: '{{ value_json.heating.off_C }}'
+    availability: '{{ value_json is defined and value_json.get(''heating'') is mapping and value_json.heating.get(''off_C'')
+      is not none }}'
+    unit_of_measurement: °C
+    device_class: temperature
+  - name: Cabana Alex Heating alarm
+    unique_id: cabana_alex_heating_alarm
+    value_template: '{{ value_json.heating.get(''alarm'') or ''None'' }}'
+    availability: '{{ value_json is defined and value_json.get(''heating'') is mapping }}'
+  - name: Cabana Alex Heating status detail
+    unique_id: cabana_alex_heating_message
+    value_template: '{{ value_json.heating.get(''message'') or ''None'' }}'
+    availability: '{{ value_json is defined and value_json.get(''heating'') is mapping }}'
+  - name: Cabana Alex SmartShunt SOC
+    unique_id: cabana_alex_shunt_soc
+    value_template: '{{ value_json.shunt.reading.get(''soc_percent'') }}'
+    availability: '{{ value_json is mapping and value_json.get(''shunt'') is mapping and value_json.shunt.get(''enabled'',
+      false) and value_json.shunt.get(''reading'') is mapping and not value_json.shunt.get(''stale'', true) and not value_json.shunt.get(''error'')
+      and value_json.shunt.reading.get(''soc_percent'') is not none }}'
+    unit_of_measurement: '%'
+    device_class: battery
+    state_class: measurement
+  - name: Cabana Alex SmartShunt Battery voltage
+    unique_id: cabana_alex_shunt_voltage
+    value_template: '{{ value_json.shunt.reading.get(''battery_V'') }}'
+    availability: '{{ value_json is mapping and value_json.get(''shunt'') is mapping and value_json.shunt.get(''enabled'',
+      false) and value_json.shunt.get(''reading'') is mapping and not value_json.shunt.get(''stale'', true) and not value_json.shunt.get(''error'')
+      and value_json.shunt.reading.get(''battery_V'') is not none }}'
+    unit_of_measurement: V
+    device_class: voltage
+    state_class: measurement
+  - name: Cabana Alex SmartShunt Current
+    unique_id: cabana_alex_shunt_current
+    value_template: '{{ value_json.shunt.reading.get(''current_A'') }}'
+    availability: '{{ value_json is mapping and value_json.get(''shunt'') is mapping and value_json.shunt.get(''enabled'',
+      false) and value_json.shunt.get(''reading'') is mapping and not value_json.shunt.get(''stale'', true) and not value_json.shunt.get(''error'')
+      and value_json.shunt.reading.get(''current_A'') is not none }}'
+    unit_of_measurement: A
+    device_class: current
+    state_class: measurement
+  - name: Cabana Alex SmartShunt Net power
+    unique_id: cabana_alex_shunt_power
+    value_template: '{{ value_json.shunt.reading.get(''net_power_W'') }}'
+    availability: '{{ value_json is mapping and value_json.get(''shunt'') is mapping and value_json.shunt.get(''enabled'',
+      false) and value_json.shunt.get(''reading'') is mapping and not value_json.shunt.get(''stale'', true) and not value_json.shunt.get(''error'')
+      and value_json.shunt.reading.get(''net_power_W'') is not none }}'
+    unit_of_measurement: W
+    device_class: power
+    state_class: measurement
+  - name: Cabana Alex SmartShunt Consumed charge
+    unique_id: cabana_alex_shunt_consumed
+    value_template: '{{ value_json.shunt.reading.get(''consumed_Ah'') }}'
+    availability: '{{ value_json is mapping and value_json.get(''shunt'') is mapping and value_json.shunt.get(''enabled'',
+      false) and value_json.shunt.get(''reading'') is mapping and not value_json.shunt.get(''stale'', true) and not value_json.shunt.get(''error'')
+      and value_json.shunt.reading.get(''consumed_Ah'') is not none }}'
+    unit_of_measurement: Ah
+    state_class: measurement
+  - name: Cabana Alex SmartShunt Time to discharge floor
+    unique_id: cabana_alex_shunt_time_to_floor
+    value_template: '{{ value_json.shunt.reading.get(''time_to_go_minutes'') }}'
+    availability: '{{ value_json is mapping and value_json.get(''shunt'') is mapping and value_json.shunt.get(''enabled'',
+      false) and value_json.shunt.get(''reading'') is mapping and not value_json.shunt.get(''stale'', true) and not value_json.shunt.get(''error'')
+      and value_json.shunt.reading.get(''time_to_go_minutes'') is not none }}'
+    unit_of_measurement: min
+    device_class: duration
+    state_class: measurement
+  - name: Cabana Alex SmartShunt Temperature
+    unique_id: cabana_alex_shunt_temperature
+    value_template: '{{ value_json.shunt.reading.get(''temperature_C'') }}'
+    availability: '{{ value_json is mapping and value_json.get(''shunt'') is mapping and value_json.shunt.get(''enabled'',
+      false) and value_json.shunt.get(''reading'') is mapping and not value_json.shunt.get(''stale'', true) and not value_json.shunt.get(''error'')
+      and value_json.shunt.reading.get(''temperature_C'') is not none }}'
+    unit_of_measurement: °C
+    device_class: temperature
+    state_class: measurement
+  - name: Cabana Alex SmartShunt Starter voltage
+    unique_id: cabana_alex_shunt_starter_voltage
+    value_template: '{{ value_json.shunt.reading.get(''starter_V'') }}'
+    availability: '{{ value_json is mapping and value_json.get(''shunt'') is mapping and value_json.shunt.get(''enabled'',
+      false) and value_json.shunt.get(''reading'') is mapping and not value_json.shunt.get(''stale'', true) and not value_json.shunt.get(''error'')
+      and value_json.shunt.reading.get(''starter_V'') is not none }}'
+    unit_of_measurement: V
+    device_class: voltage
+    state_class: measurement
+  - name: Cabana Alex SmartShunt Midpoint voltage
+    unique_id: cabana_alex_shunt_midpoint_voltage
+    value_template: '{{ value_json.shunt.reading.get(''midpoint_V'') }}'
+    availability: '{{ value_json is mapping and value_json.get(''shunt'') is mapping and value_json.shunt.get(''enabled'',
+      false) and value_json.shunt.get(''reading'') is mapping and not value_json.shunt.get(''stale'', true) and not value_json.shunt.get(''error'')
+      and value_json.shunt.reading.get(''midpoint_V'') is not none }}'
+    unit_of_measurement: V
+    device_class: voltage
+    state_class: measurement
+  - name: Cabana Alex SmartShunt Alarm code
+    unique_id: cabana_alex_shunt_alarm_code
+    value_template: '{{ value_json.shunt.reading.get(''alarm_bits'') }}'
+    availability: '{{ value_json is mapping and value_json.get(''shunt'') is mapping and value_json.shunt.get(''enabled'',
+      false) and value_json.shunt.get(''reading'') is mapping and not value_json.shunt.get(''stale'', true) and not value_json.shunt.get(''error'')
+      and value_json.shunt.reading.get(''alarm_bits'') is not none }}'
+  - name: Cabana Alex SmartShunt Sample time
+    unique_id: cabana_alex_shunt_sample_time
+    value_template: '{{ value_json.shunt.reading.get(''timestamp_utc'') }}'
+    availability: '{{ value_json is mapping and value_json.get(''shunt'') is mapping and value_json.shunt.get(''enabled'',
+      false) and value_json.shunt.get(''reading'') is mapping and not value_json.shunt.get(''stale'', true) and not value_json.shunt.get(''error'')
+      and value_json.shunt.reading.get(''timestamp_utc'') is not none }}'
+    device_class: timestamp
+  - name: Cabana Alex SmartShunt Alarms
+    unique_id: cabana_alex_shunt_alarms
+    value_template: '{{ value_json.shunt.reading.alarms | join('', '') if value_json.shunt.reading.alarms else ''None'' }}'
+    availability: '{{ value_json is mapping and value_json.get(''shunt'') is mapping and value_json.shunt.get(''enabled'',
+      false) and value_json.shunt.get(''reading'') is mapping and not value_json.shunt.get(''stale'', true) and not value_json.shunt.get(''error'')
+      and value_json.shunt.reading.get(''alarms'') is not none }}'
+    json_attributes_path: $.shunt.reading
+    json_attributes:
+    - aux_mode
+  - name: Cabana Alex Estimated time to full charge
+    unique_id: cabana_alex_charge_time_to_full
+    value_template: '{{ value_json.timers.get(''charge_minutes'') }}'
+    availability: '{{ value_json is mapping and value_json.get(''shunt'') is mapping and value_json.shunt.get(''enabled'',
+      false) and value_json.shunt.get(''reading'') is mapping and not value_json.shunt.get(''stale'', true) and not value_json.shunt.get(''error'')
+      and value_json.get(''timers'') is mapping and value_json.timers.get(''configured'', false) and value_json.timers.get(''charge_minutes'')
+      is not none }}'
+    unit_of_measurement: min
+    device_class: duration
+    state_class: measurement
+  - name: Cabana Alex Charge timer state
+    unique_id: cabana_alex_charge_timer_state
+    value_template: '{{ value_json.timers.get(''state'') }}'
+    availability: '{{ value_json is mapping and value_json.get(''timers'') is mapping and value_json.timers.get(''state'')
+      is not none }}'
+    json_attributes_path: $.timers
+    json_attributes:
+    - settings
+    - source
+    - target_percent
+    - configured
+    - settings_verified_date
+    - assumption
+    - observed_seconds
+    - averaging_seconds
+    - soc_needs_sync
+  - name: Cabana Alex Charge timer Average current
+    unique_id: cabana_alex_charge_average_current
+    value_template: '{{ value_json.timers.get(''average_current_A'') }}'
+    availability: '{{ value_json is mapping and value_json.get(''shunt'') is mapping and value_json.shunt.get(''enabled'',
+      false) and value_json.shunt.get(''reading'') is mapping and not value_json.shunt.get(''stale'', true) and not value_json.shunt.get(''error'')
+      and value_json.get(''timers'') is mapping and value_json.timers.get(''configured'', false) and value_json.timers.get(''average_current_A'')
+      is not none }}'
+    unit_of_measurement: A
+    device_class: current
+    state_class: measurement
+  - name: Cabana Alex Discharge time display
+    unique_id: cabana_alex_discharge_time_display
+    value_template: '{%- set shunt = value_json.get(''shunt'') or {} -%}
+
+      {%- set reading = shunt.get(''reading'') or {} -%}
+
+      {%- set current = reading.get(''current_A'') -%}
+
+      {%- set timers = value_json.get(''timers'') or {} -%}
+
+      {%- if not shunt.get(''enabled'', false) or shunt.get(''stale'', true) or shunt.get(''error'') or not reading -%}
+
+      No recent data
+
+      {%- elif current is number and current > 0.05 -%}
+
+      Charging
+
+      {%- elif current is number and current < -0.05 -%}
+
+      {%- set minutes = reading.get(''time_to_go_minutes'') -%}
+
+      {%- if minutes is number and minutes >= 0 -%}
+
+      {%- set total = minutes | round(0, ''ceil'') | int -%}
+
+      {{ ((total // 1440) ~ '' d '') if total >= 1440 else '''' }}{{ (((total % 1440) // 60) ~ '' h '') if total >= 60 else
+      '''' }}{{ total % 60 }} min
+
+      {%- else -%}Calculating{%- endif -%}
+
+      {%- elif current is number -%}Idle
+
+      {%- else -%}No estimate{%- endif -%}'
+    availability: '{{ value_json is defined and value_json is mapping }}'
+    icon: mdi:timer-outline
+  - name: Cabana Alex Charge time display
+    unique_id: cabana_alex_charge_time_display
+    value_template: '{%- set shunt = value_json.get(''shunt'') or {} -%}
+
+      {%- set reading = shunt.get(''reading'') or {} -%}
+
+      {%- set current = reading.get(''current_A'') -%}
+
+      {%- set timers = value_json.get(''timers'') or {} -%}
+
+      {%- if not shunt.get(''enabled'', false) or shunt.get(''stale'', true) or shunt.get(''error'') or not reading -%}
+
+      No recent data
+
+      {%- elif timers.get(''state'') == ''full'' -%}0 min
+
+      {%- elif current is number and current < -0.05 -%}Discharging
+
+      {%- elif current is number and current <= 0.05 -%}Idle
+
+      {%- elif timers.get(''state'') == ''charging'' and timers.get(''charge_minutes'') is number and timers.charge_minutes
+      >= 0 -%}
+
+      {%- set minutes = timers.charge_minutes -%}
+
+      {{ ''≈ '' }}{%- set total = minutes | round(0, ''ceil'') | int -%}
+
+      {{ ((total // 1440) ~ '' d '') if total >= 1440 else '''' }}{{ (((total % 1440) // 60) ~ '' h '') if total >= 60 else
+      '''' }}{{ total % 60 }} min
+
+      {%- elif timers.get(''state'') == ''warming'' -%}Calculating
+
+      {%- else -%}No estimate{%- endif -%}'
+    availability: '{{ value_json is mapping }}'
+    icon: mdi:timer-outline
+  - name: Cabana Alex Discharge floor
+    unique_id: cabana_alex_discharge_floor
+    value_template: '{{ value_json.timers.settings.discharge_floor_percent }}'
+    availability: '{{ value_json is mapping and value_json.get(''timers'') is mapping and value_json.timers.get(''configured'',
+      false) and value_json.timers.get(''settings'') is mapping and value_json.timers.settings.get(''discharge_floor_percent'')
+      is number }}'
+    unit_of_measurement: '%'
+    icon: mdi:battery-low
+    json_attributes_path: $.timers
+    json_attributes:
+    - settings_verified_date
+  binary_sensor:
+  - name: Cabana Alex Controller load output
+    unique_id: cabana_alex_load_output
+    value_template: '{{ value_json.reading.load_on }}'
+    availability: '{{ value_json is defined and value_json.get(''reading'') is mapping and not value_json.get(''stale'', true)
+      and not value_json.get(''error'') }}'
+    device_class: power
+  - name: Cabana Alex Controller fault
+    unique_id: cabana_alex_controller_fault
+    value_template: '{{ value_json.reading.fault_bits != 0 }}'
+    availability: '{{ value_json is defined and value_json.get(''reading'') is mapping and not value_json.get(''stale'', true)
+      and not value_json.get(''error'') }}'
+    device_class: problem
+  - name: Cabana Alex Controller data problem
+    unique_id: cabana_alex_controller_data_problem
+    value_template: '{{ value_json.get(''stale'', true) or value_json.get(''error'') is not none }}'
+    availability: '{{ value_json is defined and true }}'
+    device_class: problem
+  - name: Cabana Alex Controller CRC valid
+    unique_id: cabana_alex_controller_crc
+    value_template: '{{ value_json.reading.all_crc_valid }}'
+    availability: '{{ value_json is defined and value_json.get(''reading'') is mapping and not value_json.get(''stale'', true)
+      and not value_json.get(''error'') }}'
+  - name: Cabana Alex Climate data problem
+    unique_id: cabana_alex_climate_data_problem
+    value_template: '{{ value_json.sensor.get(''stale'', true) or value_json.sensor.get(''error'') is not none }}'
+    availability: '{{ value_json is defined and value_json.get(''sensor'') is mapping }}'
+    device_class: problem
+  - name: Cabana Alex Heating armed
+    unique_id: cabana_alex_heating_armed
+    value_template: '{{ value_json.heating.armed }}'
+    availability: '{{ value_json is defined and value_json.get(''heating'') is mapping and value_json.heating.get(''armed'')
+      is not none }}'
+  - name: Cabana Alex Heating installation ready
+    unique_id: cabana_alex_heating_ready
+    value_template: '{{ value_json.heating.installation_ready }}'
+    availability: '{{ value_json is defined and value_json.get(''heating'') is mapping and value_json.heating.get(''installation_ready'')
+      is not none }}'
+  - name: Cabana Alex Heating output
+    unique_id: cabana_alex_heating_output
+    value_template: '{{ value_json.heating.output_on }}'
+    availability: '{{ value_json is defined and value_json.get(''heating'') is mapping and value_json.heating.get(''output_on'')
+      is not none }}'
+    device_class: heat
+  - name: Cabana Alex SmartShunt Alarm
+    unique_id: cabana_alex_shunt_alarm
+    value_template: '{{ value_json.shunt.reading.alarm_bits != 0 }}'
+    availability: '{{ value_json is mapping and value_json.get(''shunt'') is mapping and value_json.shunt.get(''enabled'',
+      false) and value_json.shunt.get(''reading'') is mapping and not value_json.shunt.get(''stale'', true) and not value_json.shunt.get(''error'')
+      and value_json.shunt.reading.get(''alarm_bits'') is not none }}'
+    device_class: problem
+  - name: Cabana Alex SmartShunt Data problem
+    unique_id: cabana_alex_shunt_data_problem
+    value_template: '{{ not value_json.shunt.get(''enabled'', false) or value_json.shunt.get(''stale'', true) or value_json.shunt.get(''error'')
+      is not none or value_json.shunt.get(''reading'') is not mapping }}'
+    availability: '{{ value_json is mapping and value_json.get(''shunt'') is mapping }}'
+    device_class: problem
+  - name: Cabana Alex History storage problem
+    unique_id: cabana_alex_history_storage_problem
+    value_template: '{{ value_json.history.get(''error'') is not none or value_json.history.get(''dropped_solar_samples'',
+      0) > 0 or value_json.history.get(''dropped_sensor_samples'', 0) > 0 }}'
+    availability: '{{ value_json is mapping and value_json.get(''history'') is mapping }}'
+    device_class: problem
+- resource: http://100.82.58.122:8080/api/system
+  method: GET
+  scan_interval: 30
+  timeout: 10
+  sensor:
+  - name: Cabana Alex Pi temperature
+    unique_id: cabana_alex_pi_temperature
+    value_template: '{{ value_json.temperature_C | round(1) }}'
+    availability: '{{ value_json is defined and value_json.get(''temperature_C'') is not none }}'
+    unit_of_measurement: °C
+    device_class: temperature
+    state_class: measurement
+  - name: Cabana Alex Pi uptime
+    unique_id: cabana_alex_pi_uptime
+    value_template: '{{ value_json.uptime_seconds }}'
+    availability: '{{ value_json is defined and value_json.get(''uptime_seconds'') is not none }}'
+    unit_of_measurement: s
+    device_class: duration
+    state_class: measurement
+  - name: Cabana Alex Pi available memory
+    unique_id: cabana_alex_pi_memory_available
+    value_template: '{{ value_json.memory_available_bytes }}'
+    availability: '{{ value_json is defined and value_json.get(''memory_available_bytes'') is not none }}'
+    unit_of_measurement: B
+    device_class: data_size
+    state_class: measurement
+  - name: Cabana Alex Pi free storage
+    unique_id: cabana_alex_pi_storage_free
+    value_template: '{{ value_json.storage_free_bytes }}'
+    availability: '{{ value_json is defined and value_json.get(''storage_free_bytes'') is not none }}'
+    unit_of_measurement: B
+    device_class: data_size
+    state_class: measurement
+  - name: Cabana Alex Pi model
+    unique_id: cabana_alex_pi_model
+    value_template: '{{ value_json.model }}'
+    availability: '{{ value_json is defined and value_json.get(''model'') is not none }}'
+    json_attributes:
+    - cpu_model
+    - architecture
+    - cpu_cores
+    - os
+    - kernel
+    - python_version
+    - memory_total_bytes
+    - storage_total_bytes
+    - throttle_since_boot
+  - name: Cabana Alex Pi throttling
+    unique_id: cabana_alex_pi_throttling
+    value_template: '{{ value_json.throttle_current | join('', '') if value_json.throttle_current else ''None'' }}'
+    availability: '{{ value_json is defined and value_json.get(''throttle_current'') is not none }}'
+  - name: Cabana Alex Pi Uptime display
+    unique_id: cabana_alex_pi_uptime_display
+    value_template: '{%- set minutes = (value_json.uptime_seconds / 60) | int -%}{%- set total = minutes | round(0, ''ceil'')
+      | int -%}
+
+      {{ ((total // 1440) ~ '' d '') if total >= 1440 else '''' }}{{ (((total % 1440) // 60) ~ '' h '') if total >= 60 else
+      '''' }}{{ total % 60 }} min'
+    availability: '{{ value_json is mapping and value_json.get(''uptime_seconds'') is number }}'
+    icon: mdi:timer-outline
+  - name: Cabana Alex Pi Memory display
+    unique_id: cabana_alex_pi_memory_display
+    value_template: '{{ (value_json.memory_available_bytes / 1000000) | round(0) | int }} / {{ (value_json.memory_total_bytes
+      / 1000000) | round(0) | int }} MB'
+    availability: '{{ value_json is mapping and value_json.get(''memory_available_bytes'') is number and value_json.get(''memory_total_bytes'')
+      is number }}'
+    icon: mdi:memory
+  - name: Cabana Alex Pi Storage display
+    unique_id: cabana_alex_pi_storage_display
+    value_template: '{{ (value_json.storage_free_bytes / 1000000000) | round(1) }} / {{ (value_json.storage_total_bytes /
+      1000000000) | round(1) }} GB'
+    availability: '{{ value_json is mapping and value_json.get(''storage_free_bytes'') is number and value_json.get(''storage_total_bytes'')
+      is number }}'
+    icon: mdi:harddisk
+  - name: Cabana Alex Pi faults since boot
+    unique_id: cabana_alex_pi_faults_since_boot
+    value_template: '{{ value_json.throttle_since_boot | join('', '') if value_json.throttle_since_boot else ''None'' }}'
+    availability: '{{ value_json is mapping and value_json.get(''throttle_since_boot'') is not none }}'
+  binary_sensor: []
